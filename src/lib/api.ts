@@ -768,7 +768,7 @@ export const api = {
    */
   async deleteAgent(id: number): Promise<void> {
     try {
-      return await invoke('delete_agent', { id });
+      return await callApi('delete_agent', { id });
     } catch (error) {
       console.error("Failed to delete agent:", error);
       throw error;
@@ -1007,7 +1007,7 @@ export const api = {
    * Loads the JSONL history for a specific session
    */
   async loadSessionHistory(sessionId: string, projectId: string): Promise<any[]> {
-    return invoke("load_session_history", { sessionId, projectId });
+    return callApi("load_session_history", { sessionId, projectId });
   },
 
   /**
@@ -1029,21 +1029,21 @@ export const api = {
    * Executes a new interactive Claude Code session with streaming output
    */
   async executeClaudeCode(projectPath: string, prompt: string, model: string): Promise<void> {
-    return invoke("execute_claude_code", { projectPath, prompt, model });
+    return callApi("execute_claude_code", { projectPath, prompt, model });
   },
 
   /**
    * Continues an existing Claude Code conversation with streaming output
    */
   async continueClaudeCode(projectPath: string, prompt: string, model: string): Promise<void> {
-    return invoke("continue_claude_code", { projectPath, prompt, model });
+    return callApi("continue_claude_code", { projectPath, prompt, model });
   },
 
   /**
    * Resumes an existing Claude Code session by ID with streaming output
    */
   async resumeClaudeCode(projectPath: string, sessionId: string, prompt: string, model: string): Promise<void> {
-    return invoke("resume_claude_code", { projectPath, sessionId, prompt, model });
+    return callApi("resume_claude_code", { projectPath, sessionId, prompt, model });
   },
 
   /**
@@ -1051,7 +1051,7 @@ export const api = {
    * @param sessionId - Optional session ID to cancel a specific session
    */
   async cancelClaudeExecution(sessionId?: string): Promise<void> {
-    return invoke("cancel_claude_execution", { sessionId });
+    return callApi("cancel_claude_execution", { sessionId });
   },
 
   /**
@@ -1059,7 +1059,7 @@ export const api = {
    * @returns Promise resolving to list of running Claude sessions
    */
   async listRunningClaudeSessions(): Promise<any[]> {
-    return invoke("list_running_claude_sessions");
+    return callApi("list_running_claude_sessions");
   },
 
   /**
@@ -1068,21 +1068,21 @@ export const api = {
    * @returns Promise resolving to the current live output
    */
   async getClaudeSessionOutput(sessionId: string): Promise<string> {
-    return invoke("get_claude_session_output", { sessionId });
+    return callApi("get_claude_session_output", { sessionId });
   },
 
   /**
    * Lists files and directories in a given path
    */
   async listDirectoryContents(directoryPath: string): Promise<FileEntry[]> {
-    return invoke("list_directory_contents", { directoryPath });
+    return callApi("list_directory_contents", { directoryPath });
   },
 
   /**
    * Searches for files and directories matching a pattern
    */
   async searchFiles(basePath: string, query: string): Promise<FileEntry[]> {
-    return invoke("search_files", { basePath, query });
+    return callApi("search_files", { basePath, query });
   },
 
   /**
@@ -1161,7 +1161,7 @@ export const api = {
     messageIndex?: number,
     description?: string
   ): Promise<CheckpointResult> {
-    return invoke("create_checkpoint", {
+    return callApi("create_checkpoint", {
       sessionId,
       projectId,
       projectPath,
@@ -1179,7 +1179,7 @@ export const api = {
     projectId: string,
     projectPath: string
   ): Promise<CheckpointResult> {
-    return invoke("restore_checkpoint", {
+    return callApi("restore_checkpoint", {
       checkpointId,
       sessionId,
       projectId,
@@ -1195,7 +1195,7 @@ export const api = {
     projectId: string,
     projectPath: string
   ): Promise<Checkpoint[]> {
-    return invoke("list_checkpoints", {
+    return callApi("list_checkpoints", {
       sessionId,
       projectId,
       projectPath
@@ -1213,7 +1213,7 @@ export const api = {
     newSessionId: string,
     description?: string
   ): Promise<CheckpointResult> {
-    return invoke("fork_from_checkpoint", {
+    return callApi("fork_from_checkpoint", {
       checkpointId,
       sessionId,
       projectId,
@@ -1231,7 +1231,7 @@ export const api = {
     projectId: string,
     projectPath: string
   ): Promise<SessionTimeline> {
-    return invoke("get_session_timeline", {
+    return callApi("get_session_timeline", {
       sessionId,
       projectId,
       projectPath
@@ -1248,7 +1248,7 @@ export const api = {
     autoCheckpointEnabled: boolean,
     checkpointStrategy: CheckpointStrategy
   ): Promise<void> {
-    return invoke("update_checkpoint_settings", {
+    return callApi("update_checkpoint_settings", {
       sessionId,
       projectId,
       projectPath,
@@ -1289,7 +1289,7 @@ export const api = {
     message: string
   ): Promise<void> {
     try {
-      await invoke("track_checkpoint_message", {
+      await callApi("track_checkpoint_message", {
         sessionId,
         projectId,
         projectPath,
@@ -1359,7 +1359,7 @@ export const api = {
     current_checkpoint_id?: string;
   }> {
     try {
-      return await invoke("get_checkpoint_settings", {
+      return await callApi("get_checkpoint_settings", {
         sessionId,
         projectId,
         projectPath
@@ -1375,7 +1375,7 @@ export const api = {
    */
   async clearCheckpointManager(sessionId: string): Promise<void> {
     try {
-      await invoke("clear_checkpoint_manager", { sessionId });
+      await callApi("clear_checkpoint_manager", { sessionId });
     } catch (error) {
       console.error("Failed to clear checkpoint manager:", error);
       throw error;
@@ -1392,7 +1392,7 @@ export const api = {
     messages: string[]
   ): Promise<void> {
     try {
-      await invoke("track_session_messages", { sessionId, projectId, projectPath, messages });
+      await callApi("track_session_messages", { sessionId, projectId, projectPath, messages });
     } catch (error) {
       console.error("Failed to track session messages:", error);
       throw error;
