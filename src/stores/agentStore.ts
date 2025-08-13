@@ -114,6 +114,8 @@ const agentStore: StateCreator<
         } else if (provider === 'gemini') {
           model = (model === 'gemini-2.5-pro' || model === 'gemini-2.5-flash') ? model : 'gemini-2.5-pro';
         }
+        // Fallback for other providers or missing model
+        model = model ?? 'sonnet';
         
         const runId = await api.executeAgent(data.agentId, data.projectPath, data.task, model, provider);
         
@@ -123,7 +125,7 @@ const agentStore: StateCreator<
         // Update local state immediately
         set((state) => ({
           agentRuns: [run, ...state.agentRuns],
-          runningAgents: new Set([...state.runningAgents, run.id.toString()])
+          runningAgents: new Set([...state.runningAgents, String(run.id ?? runId)])
         }));
         
         return run;
