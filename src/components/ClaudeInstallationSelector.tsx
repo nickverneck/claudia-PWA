@@ -8,7 +8,7 @@ import { api, type ClaudeInstallation } from "@/lib/api";
 import { cn } from "@/lib/utils";
 import { CheckCircle, HardDrive, Settings, Terminal, Info } from "lucide-react";
 
-interface ClaudeVersionSelectorProps {
+interface ClaudeInstallationSelectorProps {
   /**
    * Currently selected installation path
    */
@@ -40,7 +40,7 @@ interface ClaudeVersionSelectorProps {
 }
 
 /**
- * ClaudeVersionSelector component for selecting Claude Code installations
+ * ClaudeInstallationSelector component for selecting Claude Code installations
  * Supports system installations and user preferences
  * 
  * @example
@@ -49,7 +49,7 @@ interface ClaudeVersionSelectorProps {
  *   onSelect={(installation) => setSelectedInstallation(installation)}
  * />
  */
-export const ClaudeVersionSelector: React.FC<ClaudeVersionSelectorProps> = ({
+export const ClaudeInstallationSelector: React.FC<ClaudeInstallationSelectorProps> = ({
   selectedPath,
   onSelect,
   className,
@@ -377,3 +377,6 @@ export const ClaudeVersionSelector: React.FC<ClaudeVersionSelectorProps> = ({
     </Card>
   );
 }; 
+
+// Backwards compatibility export
+export { ClaudeInstallationSelector as ClaudeVersionSelector };

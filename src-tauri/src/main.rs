@@ -5,6 +5,8 @@ mod checkpoint;
 mod claude_binary;
 mod commands;
 mod process;
+mod cli_executors;
+mod cli_manager;
 
 use checkpoint::state::CheckpointState;
 use commands::agents::{
@@ -27,7 +29,6 @@ use commands::claude::{
     save_claude_md_file, save_claude_settings, save_system_prompt, search_files,
     track_checkpoint_message, track_session_messages, update_checkpoint_settings,
     get_hooks_config, update_hooks_config, validate_hook_command,
-    ClaudeProcessState,
 };
 use commands::mcp::{
     mcp_add, mcp_add_from_claude_desktop, mcp_add_json, mcp_get, mcp_get_server_status, mcp_list,
@@ -137,8 +138,12 @@ fn main() {
             // Initialize process registry
             app.manage(ProcessRegistryState::default());
 
-            // Initialize Claude process state
-            app.manage(ClaudeProcessState::default());
+            // Initialize Claude process state (deprecated/handled by CLI manager)
+
+            // Initialize CLI manager running processes registry
+            app.manage::<cli_manager::RunningProcesses>(
+                std::sync::Arc::new(std::sync::Mutex::new(std::collections::HashMap::new()))
+            );
 
             // Apply window vibrancy with rounded corners on macOS
             #[cfg(target_os = "macos")]

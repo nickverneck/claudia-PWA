@@ -7,6 +7,7 @@ use std::time::{SystemTime, UNIX_EPOCH};
 use tauri::{AppHandle, Emitter, Manager};
 use tokio::process::Command;
 use crate::cli_manager;
+use crate::claude_binary::find_claude_binary;
 
 
 

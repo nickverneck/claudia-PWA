@@ -377,7 +377,7 @@ fn extract_version_from_output(stdout: &[u8]) -> Option<String> {
 }
 
 /// Select the best installation based on version
-fn select_best_installation(installations: Vec<ClaudeInstallation>) -> Option<ClaudeInstallation> {
+pub fn select_best_installation(installations: Vec<ClaudeInstallation>) -> Option<ClaudeInstallation> {
     // In production builds, version information may not be retrievable because
     // spawning external processes can be restricted. We therefore no longer
     // discard installations that lack a detected version – the mere presence

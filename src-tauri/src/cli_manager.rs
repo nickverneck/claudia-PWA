@@ -1,17 +1,21 @@
 // src-tauri/src/cli_manager.rs
 
-use tauri::{AppHandle, Manager};
-use tokio::process::Command;
+use tauri::{AppHandle, Manager, Emitter};
 use tokio::io::{AsyncBufReadExt, BufReader};
-use tokio::sync::mpsc;
+use tokio::process::{Child, Command};
 use std::collections::HashMap;
 use std::sync::{Arc, Mutex};
-use crate::cli_executors::claude::{discover_claude_installations, select_best_installation, create_command_with_env};
-use crate::cli_executors::gemini::{discover_gemini_installations, select_best_installation, create_command_with_env};
-use crate::cli_executors::openai_codex::{discover_openai_codex_installations, select_best_installation, create_command_with_env};
-use crate::cli_executors::qwen::{discover_qwen_installations, select_best_installation, create_command_with_env};
-use crate::cli_executors::aider::{discover_aider_installations, select_best_installation, create_command_with_env};
+use std::process::Stdio;
 use log::{info, error};
+
+// Import executor modules to avoid symbol conflicts
+use crate::cli_executors::{
+    claude as claude_exec,
+    gemini as gemini_exec,
+    openai_codex as openai_exec,
+    qwen as qwen_exec,
+    aider as aider_exec,
+};
 
 // Define a generic CLI provider enum
 #[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
@@ -38,6 +42,48 @@ pub struct CliProcess {
 // Global state to keep track of running processes
 pub type RunningProcesses = Arc<Mutex<HashMap<u32, CliProcess>>>;
 
+/// Helper to build a tokio Command with correct environment propagation
+fn create_tokio_command_with_env(program: &str) -> Command {
+    let mut cmd = Command::new(program);
+
+    // Propagate common env vars (incl. proxies)
+    for (key, value) in std::env::vars() {
+        if key == "PATH"
+            || key == "HOME"
+            || key == "USER"
+            || key == "SHELL"
+            || key == "LANG"
+            || key == "LC_ALL"
+            || key.starts_with("LC_")
+            || key == "NODE_PATH"
+            || key == "NVM_DIR"
+            || key == "NVM_BIN"
+            || key == "HOMEBREW_PREFIX"
+            || key == "HOMEBREW_CELLAR"
+            || key == "HTTP_PROXY"
+            || key == "HTTPS_PROXY"
+            || key == "NO_PROXY"
+            || key == "ALL_PROXY"
+        {
+            cmd.env(&key, &value);
+        }
+    }
+
+    // If using an NVM-installed binary, prepend its bin directory to PATH
+    if program.contains("/.nvm/versions/node/") {
+        if let Some(node_bin_dir) = std::path::Path::new(program).parent() {
+            let current_path = std::env::var("PATH").unwrap_or_default();
+            let node_bin_str = node_bin_dir.to_string_lossy();
+            if !current_path.contains(&node_bin_str.as_ref()) {
+                let new_path = format!("{}:{}", node_bin_str, current_path);
+                cmd.env("PATH", new_path);
+            }
+        }
+    }
+
+    cmd
+}
+
 // Function to execute a CLI command
 pub async fn execute_cli_command(
     app_handle: AppHandle,
@@ -51,82 +97,87 @@ pub async fn execute_cli_command(
     let mut command = match provider {
         CliProvider::Claude => {
             info!("Executing Claude command with model: {}", model);
-            let installations = discover_claude_installations();
-            let claude_path = if let Some(best) = select_best_installation(installations) {
+            let installations = claude_exec::discover_claude_installations();
+            let claude_path = if let Some(best) = claude_exec::select_best_installation(installations) {
                 best.path
             } else {
                 error!("No valid Claude installation found.");
                 return Err("No valid Claude installation found.".to_string());
             };
-            let mut cmd_builder = create_command_with_env(&claude_path);
+            let mut cmd_builder = create_tokio_command_with_env(&claude_path);
             cmd_builder.args(&["code", "--model", &model, "--project", &project_path, "--task", &task]);
             cmd_builder
         },
         CliProvider::Gemini => {
             info!("Executing Gemini command with model: {}", model);
-            let installations = discover_gemini_installations();
-            let gemini_path = if let Some(best) = select_best_installation(installations) {
+            let installations = gemini_exec::discover_gemini_installations();
+            let gemini_path = if let Some(best) = gemini_exec::select_best_installation(installations) {
                 best.path
             } else {
                 error!("No valid Gemini installation found.");
                 return Err("No valid Gemini installation found.".to_string());
             };
-            let mut cmd_builder = create_command_with_env(&gemini_path);
+            let mut cmd_builder = create_tokio_command_with_env(&gemini_path);
             cmd_builder.args(&["cli", "run", "--model", &model, "--project", &project_path, "--task", &task]);
             cmd_builder
         },
         CliProvider::OpenAI => {
             info!("Executing OpenAI Codex command with model: {}", model);
-            let installations = discover_openai_codex_installations();
-            let openai_codex_path = if let Some(best) = select_best_installation(installations) {
+            let installations = openai_exec::discover_openai_codex_installations();
+            let openai_codex_path = if let Some(best) = openai_exec::select_best_installation(installations) {
                 best.path
             } else {
                 error!("No valid OpenAI Codex installation found.");
                 return Err("No valid OpenAI Codex installation found.".to_string());
             };
-            let mut cmd_builder = create_command_with_env(&openai_codex_path);
+            let mut cmd_builder = create_tokio_command_with_env(&openai_codex_path);
             cmd_builder.args(&["run", "--model", &model, "--project", &project_path, "--task", &task]);
             cmd_builder
         },
         CliProvider::Qwen => {
             info!("Executing Qwen command with model: {}", model);
-            let installations = discover_qwen_installations();
-            let qwen_path = if let Some(best) = select_best_installation(installations) {
+            let installations = qwen_exec::discover_qwen_installations();
+            let qwen_path = if let Some(best) = qwen_exec::select_best_installation(installations) {
                 best.path
             } else {
                 error!("No valid Qwen installation found.");
                 return Err("No valid Qwen installation found.".to_string());
             };
-            let mut cmd_builder = create_command_with_env(&qwen_path);
+            let mut cmd_builder = create_tokio_command_with_env(&qwen_path);
             cmd_builder.args(&["code", "--model", &model, "--project", &project_path, "--task", &task]);
             cmd_builder
         },
         CliProvider::Aider => {
             info!("Executing Aider command with model: {}", model);
-            let installations = discover_aider_installations();
-            let aider_path = if let Some(best) = select_best_installation(installations) {
+            let installations = aider_exec::discover_aider_installations();
+            let aider_path = if let Some(best) = aider_exec::select_best_installation(installations) {
                 best.path
             } else {
                 error!("No valid Aider installation found.");
                 return Err("No valid Aider installation found.".to_string());
             };
-            let mut cmd_builder = create_command_with_env(&aider_path);
+            let mut cmd_builder = create_tokio_command_with_env(&aider_path);
             cmd_builder.args(&["--model", &model, "--project", &project_path, "--task", &task]);
             cmd_builder
         },
     };
 
     command
-        .stdout(std::process::Stdio::piped())
-        .stderr(std::process::Stdio::piped())
+        .stdout(Stdio::piped())
+        .stderr(Stdio::piped());
+
+    let mut child: Child = command
         .spawn()
         .map_err(|e| format!("Failed to spawn command: {}", e))?;
 
-    let pid = command.id().ok_or("Failed to get process ID".to_string())?;
+    let pid = child.id().ok_or("Failed to get process ID".to_string())?;
 
-    // Store the running process
-    let running_processes = app_handle.state::<RunningProcesses>();
-    running_processes.lock().unwrap().insert(pid, CliProcess {
+    // Store the running process (clone Arc out of State to avoid lifetime issues)
+    let processes_arc: RunningProcesses = {
+        let state = app_handle.state::<RunningProcesses>();
+        state.inner().clone()
+    };
+    processes_arc.lock().unwrap().insert(pid, CliProcess {
         id: pid,
         provider: provider.clone(),
         model: model.clone(),
@@ -136,7 +187,7 @@ pub async fn execute_cli_command(
     });
 
     // Spawn a task to read stdout and emit events
-    let stdout = command.stdout.take().ok_or("Failed to get stdout".to_string())?;
+    let stdout = child.stdout.take().ok_or("Failed to get stdout".to_string())?;
     let app_handle_clone = app_handle.clone();
     let session_id_clone = session_id.clone();
     tokio::spawn(async move {
@@ -144,12 +195,12 @@ pub async fn execute_cli_command(
         let mut lines = reader.lines();
         while let Some(line) = lines.next_line().await.unwrap_or(None) {
             // Emit a generic event for agent output
-            app_handle_clone.emit_all(&format!("agent-output:{}", session_id_clone), line).unwrap();
+            app_handle_clone.emit(&format!("agent-output:{}", session_id_clone), line).unwrap();
         }
     });
 
     // Spawn a task to read stderr and emit events
-    let stderr = command.stderr.take().ok_or("Failed to get stderr".to_string())?;
+    let stderr = child.stderr.take().ok_or("Failed to get stderr".to_string())?;
     let app_handle_clone = app_handle.clone();
     let session_id_clone = session_id.clone();
     tokio::spawn(async move {
@@ -157,19 +208,19 @@ pub async fn execute_cli_command(
         let mut lines = reader.lines();
         while let Some(line) = lines.next_line().await.unwrap_or(None) {
             // Emit a generic event for agent error
-            app_handle_clone.emit_all(&format!("agent-error:{}", session_id_clone), line).unwrap();
+            app_handle_clone.emit(&format!("agent-error:{}", session_id_clone), line).unwrap();
         }
     });
 
     // Spawn a task to wait for the process to finish
     let app_handle_clone = app_handle.clone();
     let session_id_clone = session_id.clone();
-    let running_processes_clone = running_processes.clone();
+    let running_processes_clone = processes_arc.clone();
     tokio::spawn(async move {
-        let status = command.wait().await.unwrap();
+        let status = child.wait().await.unwrap();
         let success = status.success();
         // Emit a generic event for agent completion
-        app_handle_clone.emit_all(&format!("agent-complete:{}", session_id_clone), success).unwrap();
+        app_handle_clone.emit(&format!("agent-complete:{}", session_id_clone), success).unwrap();
 
         // Remove from running processes
         running_processes_clone.lock().unwrap().remove(&pid);
@@ -180,11 +231,18 @@ pub async fn execute_cli_command(
 
 // Function to kill a running CLI process
 pub async fn kill_cli_process(app_handle: AppHandle, pid: u32) -> Result<bool, String> {
-    let running_processes = app_handle.state::<RunningProcesses>();
-    let mut processes = running_processes.lock().unwrap();
+    let processes_arc: RunningProcesses = {
+        let state = app_handle.state::<RunningProcesses>();
+        state.inner().clone()
+    };
+    // Remove from map first to avoid holding the lock across await
+    let should_kill = {
+        let mut processes = processes_arc.lock().unwrap();
+        processes.remove(&pid).is_some()
+    };
 
-    if let Some(process_info) = processes.remove(&pid) {
-        // Attempt to kill the process
+    if should_kill {
+        // Attempt to kill the process (no lock held)
         #[cfg(target_os = "windows")]
         {
             Command::new("taskkill")

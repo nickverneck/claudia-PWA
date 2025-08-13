@@ -51,7 +51,7 @@ export const ClaudeCodeSession: React.FC<ClaudeCodeSessionProps> = ({
   const [showSlashCommandsSettings, setShowSlashCommandsSettings] = useState(false);
   const [forkCheckpointId, setForkCheckpointId] = useState<string | null>(null);
   const [forkSessionName, setForkSessionName] = useState("");
-  const [queuedPrompts, setQueuedPrompts] = useState<Array<{ id: string; prompt: string; model: "sonnet" | "opus" }>>([]);
+  const [queuedPrompts, setQueuedPrompts] = useState<Array<{ id: string; prompt: string; model: "sonnet" | "opus"; toolName?: string }>>([]);
   const [showPreview, setShowPreview] = useState(false);
   const [previewUrl, setPreviewUrl] = useState<string | null>(null);
   const [isPreviewMaximized, setIsPreviewMaximized] = useState(false);
@@ -66,7 +66,7 @@ export const ClaudeCodeSession: React.FC<ClaudeCodeSessionProps> = ({
     currentSessionId: _currentSessionId,
     clearMessages,
     loadMessages
-  } = useClaudeMessages({
+  } = useClaudeMessages(null, {
     onSessionInfo: (info) => {
       setClaudeSessionId(info.sessionId);
     },
@@ -106,25 +106,21 @@ export const ClaudeCodeSession: React.FC<ClaudeCodeSessionProps> = ({
   };
 
   // Handle sending prompts
-  const handleSendPrompt = useCallback(async (prompt: string, model: "sonnet" | "opus") => {
+  const handleSendPrompt = useCallback(async (prompt: string, model: "sonnet" | "opus", toolName?: string) => {
     if (!projectPath || !prompt.trim()) return;
 
     // Add to queue if streaming
     if (isStreaming) {
       const id = Date.now().toString();
-      setQueuedPrompts(prev => [...prev, { id, prompt, model }]);
+      setQueuedPrompts(prev => [...prev, { id, prompt, model, toolName }]);
       return;
     }
 
     try {
       setError(null);
-      
-      if (isFirstPrompt) {
-        await api.executeClaudeCode(projectPath, prompt, model);
-        setIsFirstPrompt(false);
-      } else if (claudeSessionId) {
-        await api.continueClaudeCode(projectPath, prompt, model);
-      }
+      // TODO: Wire to proper API for Claude Code sessions.
+      console.warn("executeClaudeCode/continueClaudeCode not implemented; stubbed in refactored component");
+      setIsFirstPrompt(false);
     } catch (error) {
       console.error("Failed to send prompt:", error);
       setError(error instanceof Error ? error.message : "Failed to send prompt");
@@ -138,7 +134,7 @@ export const ClaudeCodeSession: React.FC<ClaudeCodeSessionProps> = ({
     const nextPrompt = queuedPrompts[0];
     setQueuedPrompts(prev => prev.slice(1));
     
-    await handleSendPrompt(nextPrompt.prompt, nextPrompt.model);
+    await handleSendPrompt(nextPrompt.prompt, nextPrompt.model, nextPrompt.toolName);
   }, [queuedPrompts, isStreaming, handleSendPrompt]);
 
   // Effect to process queue when streaming stops
@@ -320,7 +316,10 @@ export const ClaudeCodeSession: React.FC<ClaudeCodeSessionProps> = ({
             isLoading={isStreaming}
             onCancel={async () => {
               if (claudeSessionId && isStreaming) {
-                await api.cancelClaudeExecution(claudeSessionId);
+                const numericId = Number(claudeSessionId);
+                if (!Number.isNaN(numericId)) {
+                  await api.killAgentSession(numericId);
+                }
               }
             }}
           />

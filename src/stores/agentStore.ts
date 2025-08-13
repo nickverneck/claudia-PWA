@@ -106,7 +106,9 @@ const agentStore: StateCreator<
     // Create a new agent run
     createAgentRun: async (data: { agentId: number; projectPath: string; task: string; model?: string; provider?: string }) => {
       try {
-        const runId = await api.executeAgent(data.agentId, data.projectPath, data.task, data.model, data.provider);
+        const model = (data.model === 'opus' || data.model === 'sonnet') ? data.model : 'sonnet';
+        const provider = data.provider ?? 'claude';
+        const runId = await api.executeAgent(data.agentId, data.projectPath, data.task, model, provider);
         
         // Fetch the created run details
         const run = await api.getAgentRun(runId);

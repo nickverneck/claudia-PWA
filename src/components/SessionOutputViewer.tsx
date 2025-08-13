@@ -8,6 +8,7 @@ import { Toast, ToastContainer } from '@/components/ui/toast';
 import { Popover } from '@/components/ui/popover';
 import { api } from '@/lib/api';
 import { useOutputCache } from '@/lib/outputCache';
+import type { ClaudeStreamMessage } from '@/lib/outputCache';
 import type { AgentRun } from '@/lib/api';
 import { listen, type UnlistenFn } from '@tauri-apps/api/event';
 import { StreamMessage } from './StreamMessage';
@@ -19,23 +20,7 @@ interface SessionOutputViewerProps {
   className?: string;
 }
 
-// Use the same message interface as AgentExecution for consistency
-export interface ClaudeStreamMessage {
-  type: "system" | "assistant" | "user" | "result";
-  subtype?: string;
-  message?: {
-    content?: any[];
-    usage?: {
-      input_tokens: number;
-      output_tokens: number;
-    };
-  };
-  usage?: {
-    input_tokens: number;
-    output_tokens: number;
-  };
-  [key: string]: any;
-}
+// Use shared ClaudeStreamMessage from lib/outputCache (includes 'tool' type)
 
 export function SessionOutputViewer({ session, onClose, className }: SessionOutputViewerProps) {
   const [messages, setMessages] = useState<ClaudeStreamMessage[]>([]);

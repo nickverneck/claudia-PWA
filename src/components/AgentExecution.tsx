@@ -59,7 +59,7 @@ interface AgentExecutionProps {
 }
 
 export interface ClaudeStreamMessage {
-  type: "system" | "assistant" | "user" | "result";
+  type: "system" | "assistant" | "user" | "result" | "tool";
   subtype?: string;
   message?: {
     content?: any[];
@@ -301,7 +301,8 @@ export const AgentExecution: React.FC<AgentExecutionProps> = ({
       unlistenRefs.current = [];
       
       // Execute the agent and get the run ID
-      const executionRunId = await api.executeAgent(agent.id!, projectPath, task, model);
+      const provider = (agent as any).provider || 'claude';
+      const executionRunId = await api.executeAgent(agent.id!, projectPath, task, model, provider);
       console.log("Agent execution started with run ID:", executionRunId);
       setRunId(executionRunId);
       

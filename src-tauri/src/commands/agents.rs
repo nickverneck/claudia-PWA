@@ -1941,15 +1941,22 @@ pub async fn import_agent(db: State<'_, AgentDb>, json_data: String) -> Result<A
         agent_data.name
     };
 
-    // Create the agent
+    // Determine provider from import (default to "claude" if absent)
+    let imported_provider: String = {
+        // Try to infer provider from hooks or model naming if needed; default for now
+        "claude".to_string()
+    };
+
+    // Create the agent (including provider)
     conn.execute(
-        "INSERT INTO agents (name, icon, system_prompt, default_task, model, enable_file_read, enable_file_write, enable_network, hooks) VALUES (?1, ?2, ?3, ?4, ?5, 1, 1, 0, ?6)",
+        "INSERT INTO agents (name, icon, system_prompt, default_task, model, provider, enable_file_read, enable_file_write, enable_network, hooks) VALUES (?1, ?2, ?3, ?4, ?5, ?6, 1, 1, 0, ?7)",
         params![
             final_name,
             agent_data.icon,
             agent_data.system_prompt,
             agent_data.default_task,
             agent_data.model,
+            imported_provider,
             agent_data.hooks
         ],
     )
@@ -1960,7 +1967,7 @@ pub async fn import_agent(db: State<'_, AgentDb>, json_data: String) -> Result<A
     // Fetch the created agent
     let agent = conn
         .query_row(
-            "SELECT id, name, icon, system_prompt, default_task, model, enable_file_read, enable_file_write, enable_network, hooks, created_at, updated_at FROM agents WHERE id = ?1",
+            "SELECT id, name, icon, system_prompt, default_task, model, provider, enable_file_read, enable_file_write, enable_network, hooks, created_at, updated_at FROM agents WHERE id = ?1",
             params![id],
             |row| {
                 Ok(Agent {
@@ -1970,12 +1977,13 @@ pub async fn import_agent(db: State<'_, AgentDb>, json_data: String) -> Result<A
                     system_prompt: row.get(3)?,
                     default_task: row.get(4)?,
                     model: row.get(5)?,
-                    enable_file_read: row.get(6)?,
-                    enable_file_write: row.get(7)?,
-                    enable_network: row.get(8)?,
-                    hooks: row.get(9)?,
-                    created_at: row.get(10)?,
-                    updated_at: row.get(11)?,
+                    provider: row.get(6)?,
+                    enable_file_read: row.get(7)?,
+                    enable_file_write: row.get(8)?,
+                    enable_network: row.get(9)?,
+                    hooks: row.get(10)?,
+                    created_at: row.get(11)?,
+                    updated_at: row.get(12)?,
                 })
             },
         )

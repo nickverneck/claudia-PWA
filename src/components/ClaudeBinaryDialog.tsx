@@ -3,7 +3,7 @@ import { api, type ClaudeInstallation } from "@/lib/api";
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { ExternalLink, FileQuestion, Terminal, AlertCircle, Loader2 } from "lucide-react";
-import { ClaudeInstallationSelector } from "./ClaudeInstallationSelector";
+import { ClaudeVersionSelector } from "./ClaudeInstallationSelector";
 
 interface ClaudeBinaryDialogProps {
   open: boolean;
@@ -105,7 +105,7 @@ export function ClaudeBinaryDialog({ open, onOpenChange, onSuccess, onError }: C
         {!checkingInstallations && hasInstallations && (
           <div className="py-4">
             <ClaudeVersionSelector
-              onSelect={(installation) => setSelectedInstallation(installation)}
+              onSelect={(installation: ClaudeInstallation) => setSelectedInstallation(installation)}
               selectedPath={null}
             />
           </div>

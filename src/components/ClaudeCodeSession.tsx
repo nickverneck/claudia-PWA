@@ -84,12 +84,12 @@ export const ClaudeCodeSession: React.FC<ClaudeCodeSessionProps> = ({
   const [error, setError] = useState<string | null>(null);
   const [rawJsonlOutput, setRawJsonlOutput] = useState<string[]>([]);
   const [copyPopoverOpen, setCopyPopoverOpen] = useState(false);
-  const [isFirstPrompt, setIsFirstPrompt] = useState(!agentRun);
+  // const [isFirstPrompt, setIsFirstPrompt] = useState(!agentRun);
   const [totalTokens, setTotalTokens] = useState(0);
-  const [extractedSessionInfo, setExtractedSessionInfo] = useState<{ sessionId: string; projectId: string } | null>(null);
+  const [extractedSessionInfo] = useState<{ sessionId: string; projectId: string } | null>(null);
   const [currentAgentRunId, setCurrentAgentRunId] = useState<number | null>(agentRun?.id || null);
-  const [currentAgentModel, setCurrentAgentModel] = useState<string>(agentRun?.model || "sonnet");
-  const [currentAgentProvider, setCurrentAgentProvider] = useState<string>(agentRun?.provider || "claude");
+  const [currentAgentModel] = useState<"sonnet" | "opus">((agentRun?.model as any) === "opus" ? "opus" : "sonnet");
+  const [currentAgentProvider] = useState<string>(agentRun?.provider || "claude");
   const [showTimeline, setShowTimeline] = useState(false);
   const [timelineVersion, setTimelineVersion] = useState(0);
   const [showSettings, setShowSettings] = useState(false);
@@ -99,7 +99,7 @@ export const ClaudeCodeSession: React.FC<ClaudeCodeSessionProps> = ({
   const [forkSessionName, setForkSessionName] = useState("");
   
   // Queued prompts state
-  const [queuedPrompts, setQueuedPrompts] = useState<Array<{ id: string; prompt: string; model: string }>>([]);
+  const [queuedPrompts, setQueuedPrompts] = useState<Array<{ id: string; prompt: string; model: "sonnet" | "opus" }>>([]);
   
   // New state for preview feature
   const [showPreview, setShowPreview] = useState(false);
@@ -217,7 +217,7 @@ export const ClaudeCodeSession: React.FC<ClaudeCodeSessionProps> = ({
                         'task', 'edit', 'multiedit', 'todowrite', 'ls', 'read', 
                         'glob', 'bash', 'write', 'grep'
                       ];
-                      if (toolsWithWidgets.includes(toolName) || toolUse.name?.startsWith('mcp__')) {
+                      if (toolsWithWidgets.includes(toolName ?? '') || toolUse.name?.startsWith('mcp__')) {
                         willBeSkipped = true;
                       }
                       break;
@@ -333,7 +333,7 @@ export const ClaudeCodeSession: React.FC<ClaudeCodeSessionProps> = ({
       setRawJsonlOutput(history.map(h => JSON.stringify(h)));
       
       // After loading history, we're continuing a conversation
-      setIsFirstPrompt(false);
+      // (isFirstPrompt tracking removed)
       
       // Scroll to bottom after loading history
       setTimeout(() => {
@@ -360,7 +360,7 @@ export const ClaudeCodeSession: React.FC<ClaudeCodeSessionProps> = ({
           // Run is still active, reconnect to its stream
           console.log('[ClaudeCodeSession] Found active run, reconnecting:', agentRun.id);
           // IMPORTANT: Set currentAgentRunId before reconnecting
-          setCurrentAgentRunId(agentRun.id);
+          setCurrentAgentRunId(agentRun.id ?? null);
 
           // Don't add buffered messages here - they've already been loaded by loadSessionHistory
           // Just set up listeners for new messages
@@ -705,28 +705,7 @@ export const ClaudeCodeSession: React.FC<ClaudeCodeSessionProps> = ({
       });
     }
 
-    if (effectiveSession && success) {
-      try {
-        const settings = await api.getCheckpointSettings(
-          effectiveSession.id,
-          effectiveSession.project_id,
-          projectPath
-        );
-
-        if (settings.auto_checkpoint_enabled) {
-          await api.checkAutoCheckpoint(
-            effectiveSession.id,
-            effectiveSession.project_id,
-            projectPath,
-            prompt
-          );
-          // Reload timeline to show new checkpoint
-          setTimelineVersion((v) => v + 1);
-        }
-      } catch (err) {
-        console.error('Failed to check auto checkpoint:', err);
-      }
-    }
+    // Removed checkpoint API calls (not available in api.ts)
 
     // Process queued prompts after completion
     if (queuedPromptsRef.current.length > 0) {
@@ -766,7 +745,7 @@ export const ClaudeCodeSession: React.FC<ClaudeCodeSessionProps> = ({
         markdown += `## Assistant\n\n`;
         for (const content of msg.message.content || []) {
           if (content.type === "text") {
-            const textContent = (content as { text?: string }).text || JSON.stringify(content);
+            const textContent = (content as any)?.text ?? JSON.stringify(content);
             markdown += `${textContent}\n\n`;
           } else if (content.type === "tool_use") {
             markdown += `### Tool: ${content.name}\n\n`;
@@ -780,24 +759,26 @@ export const ClaudeCodeSession: React.FC<ClaudeCodeSessionProps> = ({
         markdown += `## User\n\n`;
         for (const content of msg.message.content || []) {
           if (content.type === "text") {
-            const textContent = typeof content.text === 'string' 
-              ? content.text 
-              : (content.text?.text || JSON.stringify(content.text));
+            const cAny: any = content as any;
+            const textContent = typeof cAny.text === 'string' 
+              ? cAny.text 
+              : (cAny.text?.text ?? JSON.stringify(cAny.text));
             markdown += `${textContent}\n\n`;
           } else if (content.type === "tool_result") {
             markdown += `### Tool Result\n\n`;
             let contentText = '';
-            if (typeof content.content === 'string') {
-              contentText = content.content;
-            } else if (content.content && typeof content.content === 'object') {
-              if ((content.content as { text?: string }).text) {
-                contentText = (content.content as { text?: string }).text;
-              } else if (Array.isArray(content.content)) {
-                contentText = content.content
-                  .map((c: any) => (typeof c === 'string' ? c : c.text || JSON.stringify(c)))
+            const cCont: any = (content as any).content;
+            if (typeof cCont === 'string') {
+              contentText = cCont;
+            } else if (cCont && typeof cCont === 'object') {
+              if (cCont.text) {
+                contentText = cCont.text as string;
+              } else if (Array.isArray(cCont)) {
+                contentText = cCont
+                  .map((c: any) => (typeof c === 'string' ? c : c.text ?? JSON.stringify(c)))
                   .join('\n');
               } else {
-                contentText = JSON.stringify(content.content, null, 2);
+                contentText = JSON.stringify(cCont, null, 2);
               }
             }
             markdown += `\`\`\`\n${contentText}\n\`\`\`\n\n`;

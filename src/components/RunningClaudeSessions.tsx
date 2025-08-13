@@ -3,7 +3,7 @@ import { motion } from "framer-motion";
 import { Play, Loader2, Terminal, AlertCircle } from "lucide-react";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
-import { api, type ProcessInfo, type Session } from "@/lib/api";
+import { api, type AgentRun, type Session } from "@/lib/api";
 import { cn } from "@/lib/utils";
 import { formatISOTimestamp } from "@/lib/date-utils";
 
@@ -25,7 +25,7 @@ export const RunningClaudeSessions: React.FC<RunningClaudeSessionsProps> = ({
   onSessionClick,
   className,
 }) => {
-  const [runningSessions, setRunningSessions] = useState<ProcessInfo[]>([]);
+  const [runningSessions, setRunningSessions] = useState<AgentRun[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
@@ -39,7 +39,7 @@ export const RunningClaudeSessions: React.FC<RunningClaudeSessionsProps> = ({
 
   const loadRunningSessions = async () => {
     try {
-      const sessions = await api.listRunningClaudeSessions();
+      const sessions = await api.listRunningAgentSessions();
       setRunningSessions(sessions);
       setError(null);
     } catch (err) {
@@ -50,27 +50,21 @@ export const RunningClaudeSessions: React.FC<RunningClaudeSessionsProps> = ({
     }
   };
 
-  const handleResumeSession = (processInfo: ProcessInfo) => {
-    // Extract session ID from process type
-    if ('ClaudeSession' in processInfo.process_type) {
-      const sessionId = processInfo.process_type.ClaudeSession.session_id;
-      
-      // Create a minimal session object for resumption
-      const session: Session = {
-        id: sessionId,
-        project_id: processInfo.project_path.replace(/[^a-zA-Z0-9]/g, '-'),
-        project_path: processInfo.project_path,
-        created_at: new Date(processInfo.started_at).getTime() / 1000,
-      };
-      
-      // Emit event to navigate to the session
-      const event = new CustomEvent('claude-session-selected', { 
-        detail: { session, projectPath: processInfo.project_path } 
-      });
-      window.dispatchEvent(event);
-      
-      onSessionClick?.(session);
-    }
+  const handleResumeSession = (run: AgentRun) => {
+    if (!run.session_id) return;
+    const sessionId = run.session_id;
+    // Create a minimal session object for resumption
+    const session: Session = {
+      id: sessionId,
+      project_id: run.project_path.replace(/[^a-zA-Z0-9]/g, '-'),
+      project_path: run.project_path,
+      created_at: new Date(run.process_started_at || run.created_at).getTime() / 1000,
+    };
+    const event = new CustomEvent('claude-session-selected', { 
+      detail: { session, projectPath: run.project_path } 
+    });
+    window.dispatchEvent(event);
+    onSessionClick?.(session);
   };
 
   if (loading && runningSessions.length === 0) {
@@ -108,15 +102,12 @@ export const RunningClaudeSessions: React.FC<RunningClaudeSessionsProps> = ({
 
       <div className="space-y-2">
         {runningSessions.map((session) => {
-          const sessionId = 'ClaudeSession' in session.process_type 
-            ? session.process_type.ClaudeSession.session_id 
-            : null;
-          
+          const sessionId = session.session_id;
           if (!sessionId) return null;
 
           return (
             <motion.div
-              key={session.run_id}
+              key={session.id ?? session.session_id}
               initial={{ opacity: 0, y: 8 }}
               animate={{ opacity: 1, y: 0 }}
               transition={{ duration: 0.15 }}
@@ -144,7 +135,7 @@ export const RunningClaudeSessions: React.FC<RunningClaudeSessionsProps> = ({
                         </p>
                         
                         <div className="flex items-center gap-3 text-xs text-muted-foreground">
-                          <span>Started: {formatISOTimestamp(session.started_at)}</span>
+                          <span>Started: {formatISOTimestamp(session.process_started_at || session.created_at)}</span>
                           <span>Model: {session.model}</span>
                           {session.task && (
                             <span className="truncate max-w-[200px]" title={session.task}>
