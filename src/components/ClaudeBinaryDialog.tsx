@@ -3,7 +3,7 @@ import { api, type ClaudeInstallation } from "@/lib/api";
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { ExternalLink, FileQuestion, Terminal, AlertCircle, Loader2 } from "lucide-react";
-import { ClaudeVersionSelector } from "./ClaudeVersionSelector";
+import { ClaudeInstallationSelector } from "./ClaudeInstallationSelector";
 
 interface ClaudeBinaryDialogProps {
   open: boolean;

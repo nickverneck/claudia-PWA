@@ -1,7 +1,7 @@
 import { useState, useCallback, useRef, useEffect } from 'react';
 import { listen, type UnlistenFn } from '@tauri-apps/api/event';
 import { api } from '@/lib/api';
-import type { ClaudeStreamMessage } from '../AgentExecution';
+import type { AgentStreamMessage } from '@/lib/api';
 
 interface UseClaudeMessagesOptions {
   onSessionInfo?: (info: { sessionId: string; projectId: string }) => void;
@@ -9,8 +9,8 @@ interface UseClaudeMessagesOptions {
   onStreamingChange?: (isStreaming: boolean, sessionId: string | null) => void;
 }
 
-export function useClaudeMessages(options: UseClaudeMessagesOptions = {}) {
-  const [messages, setMessages] = useState<ClaudeStreamMessage[]>([]);
+export function useClaudeMessages(runId: number | null, options: UseClaudeMessagesOptions = {}) {
+  const [messages, setMessages] = useState<AgentStreamMessage[]>([]);
   const [rawJsonlOutput, setRawJsonlOutput] = useState<string[]>([]);
   const [isStreaming, setIsStreaming] = useState(false);
   const [currentSessionId, setCurrentSessionId] = useState<string | null>(null);
@@ -18,7 +18,7 @@ export function useClaudeMessages(options: UseClaudeMessagesOptions = {}) {
   const eventListenerRef = useRef<UnlistenFn | null>(null);
   const accumulatedContentRef = useRef<{ [key: string]: string }>({});
 
-  const handleMessage = useCallback((message: ClaudeStreamMessage) => {
+  const handleMessage = useCallback((message: AgentStreamMessage) => {
     if ((message as any).type === "start") {
       // Clear accumulated content for new stream
       accumulatedContentRef.current = {};
@@ -67,10 +67,10 @@ export function useClaudeMessages(options: UseClaudeMessagesOptions = {}) {
 
   const loadMessages = useCallback(async (sessionId: string) => {
     try {
-      const output = await api.getSessionOutput(parseInt(sessionId));
+      const output = await api.getSessionOutput(parseInt(sessionId, 10));
       // Note: API returns a string, not an array of outputs
       const outputs = [{ jsonl: output }];
-      const loadedMessages: ClaudeStreamMessage[] = [];
+      const loadedMessages: AgentStreamMessage[] = [];
       const loadedRawJsonl: string[] = [];
       
       outputs.forEach(output => {
@@ -103,12 +103,16 @@ export function useClaudeMessages(options: UseClaudeMessagesOptions = {}) {
         eventListenerRef.current();
       }
       
-      eventListenerRef.current = await listen<string>("claude-stream", (event) => {
+      if (runId === null) {
+        return;
+      }
+
+      eventListenerRef.current = await listen<string>(`agent-output:${runId}`, (event) => {
         try {
-          const message = JSON.parse(event.payload) as ClaudeStreamMessage;
+          const message = JSON.parse(event.payload) as AgentStreamMessage;
           handleMessage(message);
         } catch (error) {
-          console.error("Failed to parse Claude stream message:", error);
+          console.error("Failed to parse agent stream message:", error);
         }
       });
     };
@@ -120,7 +124,7 @@ export function useClaudeMessages(options: UseClaudeMessagesOptions = {}) {
         eventListenerRef.current();
       }
     };
-  }, [handleMessage]);
+  }, [runId, handleMessage]);
 
   return {
     messages,

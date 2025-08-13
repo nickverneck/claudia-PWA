@@ -49,6 +49,9 @@ export const CreateAgent: React.FC<CreateAgentProps> = ({
   const [systemPrompt, setSystemPrompt] = useState(agent?.system_prompt || "");
   const [defaultTask, setDefaultTask] = useState(agent?.default_task || "");
   const [model, setModel] = useState(agent?.model || "sonnet");
+  const [selectedProvider, setSelectedProvider] = useState<"claude" | "gemini" | "openai" | "qwen" | "aider">(
+    (agent?.provider as "claude" | "gemini" | "openai" | "qwen" | "aider") || "claude"
+  );
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [toast, setToast] = useState<{ message: string; type: "success" | "error" } | null>(null);
@@ -78,7 +81,8 @@ export const CreateAgent: React.FC<CreateAgentProps> = ({
           selectedIcon, 
           systemPrompt, 
           defaultTask || undefined, 
-          model
+          model,
+          selectedProvider
         );
       } else {
         await api.createAgent(
@@ -86,7 +90,8 @@ export const CreateAgent: React.FC<CreateAgentProps> = ({
           selectedIcon, 
           systemPrompt, 
           defaultTask || undefined, 
-          model
+          model,
+          selectedProvider
         );
       }
       
@@ -146,7 +151,7 @@ export const CreateAgent: React.FC<CreateAgentProps> = ({
                   {isEditMode ? "Edit Agent" : "Create New Agent"}
                 </h1>
                 <p className="mt-1 text-body-small text-muted-foreground">
-                  {isEditMode ? "Update your Claude Code agent configuration" : "Configure a new Claude Code agent"}
+                  {isEditMode ? "Update your AI agent configuration" : "Configure a new AI agent"}
                 </p>
               </div>
             </div>
@@ -235,59 +240,354 @@ export const CreateAgent: React.FC<CreateAgentProps> = ({
                 </div>
               </div>
 
-              {/* Model Selection */}
+              {/* Provider Selection */}
               <div className="space-y-2 mt-4">
-                <Label className="text-caption text-muted-foreground">Model</Label>
+                <Label className="text-caption text-muted-foreground">Provider</Label>
                 <div className="flex flex-col sm:flex-row gap-2">
+                  {/* Claude Code Provider */}
                   <motion.button
                     type="button"
-                    onClick={() => setModel("sonnet")}
+                    onClick={() => setSelectedProvider("claude")}
                     whileTap={{ scale: 0.97 }}
                     transition={{ duration: 0.15 }}
                     className={cn(
                       "flex-1 px-4 py-3 rounded-md border transition-all",
-                      model === "sonnet" 
-                        ? "border-primary bg-primary/10 text-primary" 
+                      selectedProvider === "claude"
+                        ? "border-primary bg-primary/10 text-primary"
                         : "border-border hover:border-primary/50 hover:bg-accent"
                     )}
                   >
                     <div className="flex items-center gap-3">
                       <Zap className={cn(
                         "h-4 w-4",
-                        model === "sonnet" ? "text-primary" : "text-muted-foreground"
+                        selectedProvider === "claude" ? "text-primary" : "text-muted-foreground"
                       )} />
                       <div className="text-left">
-                        <div className="text-body-small font-medium">Claude 4 Sonnet</div>
-                        <div className="text-caption text-muted-foreground">Faster, efficient for most tasks</div>
+                        <div className="text-body-small font-medium">Claude Code</div>
+                        <div className="text-caption text-muted-foreground">Anthropic's AI coding assistant</div>
                       </div>
                     </div>
                   </motion.button>
-                  
+
+                  {/* Gemini CLI Provider */}
                   <motion.button
                     type="button"
-                    onClick={() => setModel("opus")}
+                    onClick={() => setSelectedProvider("gemini")}
                     whileTap={{ scale: 0.97 }}
                     transition={{ duration: 0.15 }}
                     className={cn(
                       "flex-1 px-4 py-3 rounded-md border transition-all",
-                      model === "opus" 
-                        ? "border-primary bg-primary/10 text-primary" 
+                      selectedProvider === "gemini"
+                        ? "border-primary bg-primary/10 text-primary"
                         : "border-border hover:border-primary/50 hover:bg-accent"
                     )}
                   >
                     <div className="flex items-center gap-3">
                       <Zap className={cn(
                         "h-4 w-4",
-                        model === "opus" ? "text-primary" : "text-muted-foreground"
+                        selectedProvider === "gemini" ? "text-primary" : "text-muted-foreground"
                       )} />
                       <div className="text-left">
-                        <div className="text-body-small font-medium">Claude 4 Opus</div>
-                        <div className="text-caption text-muted-foreground">More capable, better for complex tasks</div>
+                        <div className="text-body-small font-medium">Gemini CLI</div>
+                        <div className="text-caption text-muted-foreground">Google's AI agent for terminal</div>
+                      </div>
+                    </div>
+                  </motion.button>
+                </div>
+                <div className="flex flex-col sm:flex-row gap-2 mt-2">
+                  {/* OpenAI Codex CLI Provider */}
+                  <motion.button
+                    type="button"
+                    onClick={() => setSelectedProvider("openai")}
+                    whileTap={{ scale: 0.97 }}
+                    transition={{ duration: 0.15 }}
+                    className={cn(
+                      "flex-1 px-4 py-3 rounded-md border transition-all",
+                      selectedProvider === "openai"
+                        ? "border-primary bg-primary/10 text-primary"
+                        : "border-border hover:border-primary/50 hover:bg-accent"
+                    )}
+                  >
+                    <div className="flex items-center gap-3">
+                      <Zap className={cn(
+                        "h-4 w-4",
+                        selectedProvider === "openai" ? "text-primary" : "text-muted-foreground"
+                      )} />
+                      <div className="text-left">
+                        <div className="text-body-small font-medium">OpenAI Codex CLI</div>
+                        <div className="text-caption text-muted-foreground">OpenAI's reasoning models</div>
+                      </div>
+                    </div>
+                  </motion.button>
+
+                  {/* Qwen3 Coder Provider */}
+                  <motion.button
+                    type="button"
+                    onClick={() => setSelectedProvider("qwen")}
+                    whileTap={{ scale: 0.97 }}
+                    transition={{ duration: 0.15 }}
+                    className={cn(
+                      "flex-1 px-4 py-3 rounded-md border transition-all",
+                      selectedProvider === "qwen"
+                        ? "border-primary bg-primary/10 text-primary"
+                        : "border-border hover:border-primary/50 hover:bg-accent"
+                    )}
+                  >
+                    <div className="flex items-center gap-3">
+                      <Zap className={cn(
+                        "h-4 w-4",
+                        selectedProvider === "qwen" ? "text-primary" : "text-muted-foreground"
+                      )} />
+                      <div className="text-left">
+                        <div className="text-body-small font-medium">Qwen3 Coder</div>
+                        <div className="text-caption text-muted-foreground">Alibaba's agentic coding model</div>
+                      </div>
+                    </div>
+                  </motion.button>
+                </div>
+                <div className="flex flex-col sm:flex-row gap-2 mt-2">
+                  {/* Aider Provider (Disabled) */}
+                  <motion.button
+                    type="button"
+                    onClick={() => { /* Aider is disabled for now */ }}
+                    whileTap={{ scale: 0.97 }}
+                    transition={{ duration: 0.15 }}
+                    className={cn(
+                      "flex-1 px-4 py-3 rounded-md border transition-all opacity-50 cursor-not-allowed",
+                      selectedProvider === "aider"
+                        ? "border-primary bg-primary/10 text-primary"
+                        : "border-border hover:border-primary/50 hover:bg-accent"
+                    )}
+                    disabled
+                  >
+                    <div className="flex items-center gap-3">
+                      <Zap className={cn(
+                        "h-4 w-4",
+                        selectedProvider === "aider" ? "text-primary" : "text-muted-foreground"
+                      )} />
+                      <div className="text-left">
+                        <div className="text-body-small font-medium">Aider</div>
+                        <div className="text-caption text-muted-foreground">AI pair programmer (Coming Soon)</div>
                       </div>
                     </div>
                   </motion.button>
                 </div>
               </div>
+
+              {/* Model Selection (Conditional based on Provider) */}
+              {selectedProvider === "claude" && (
+                <div className="space-y-2 mt-4">
+                  <Label className="text-caption text-muted-foreground">Model</Label>
+                  <div className="flex flex-col sm:flex-row gap-2">
+                    <motion.button
+                      type="button"
+                      onClick={() => setModel("sonnet")}
+                      whileTap={{ scale: 0.97 }}
+                      transition={{ duration: 0.15 }}
+                      className={cn(
+                        "flex-1 px-4 py-3 rounded-md border transition-all",
+                        model === "sonnet"
+                          ? "border-primary bg-primary/10 text-primary"
+                          : "border-border hover:border-primary/50 hover:bg-accent"
+                      )}
+                    >
+                      <div className="flex items-center gap-3">
+                        <Zap className={cn(
+                          "h-4 w-4",
+                          model === "sonnet" ? "text-primary" : "text-muted-foreground"
+                        )} />
+                        <div className="text-left">
+                          <div className="text-body-small font-medium">Claude 4 Sonnet</div>
+                          <div className="text-caption text-muted-foreground">Faster, efficient for most tasks</div>
+                        </div>
+                      </div>
+                    </motion.button>
+
+                    <motion.button
+                      type="button"
+                      onClick={() => setModel("opus")}
+                      whileTap={{ scale: 0.97 }}
+                      transition={{ duration: 0.15 }}
+                      className={cn(
+                        "flex-1 px-4 py-3 rounded-md border transition-all",
+                        model === "opus"
+                          ? "border-primary bg-primary/10 text-primary"
+                          : "border-border hover:border-primary/50 hover:bg-accent"
+                      )}
+                    >
+                      <div className="flex items-center gap-3">
+                        <Zap className={cn(
+                          "h-4 w-4",
+                          model === "opus" ? "text-primary" : "text-muted-foreground"
+                        )} />
+                        <div className="text-left">
+                          <div className="text-body-small font-medium">Claude 4 Opus</div>
+                          <div className="text-caption text-muted-foreground">More capable, better for complex tasks</div>
+                        </div>
+                      </div>
+                    </motion.button>
+                  </div>
+                </div>
+              )}
+              {selectedProvider === "gemini" && (
+                <div className="space-y-2 mt-4">
+                  <Label className="text-caption text-muted-foreground">Model</Label>
+                  <div className="flex flex-col sm:flex-row gap-2">
+                    <motion.button
+                      type="button"
+                      onClick={() => setModel("gemini-pro")}
+                      whileTap={{ scale: 0.97 }}
+                      transition={{ duration: 0.15 }}
+                      className={cn(
+                        "flex-1 px-4 py-3 rounded-md border transition-all",
+                        model === "gemini-pro"
+                          ? "border-primary bg-primary/10 text-primary"
+                          : "border-border hover:border-primary/50 hover:bg-accent"
+                      )}
+                    >
+                      <div className="flex items-center gap-3">
+                        <Zap className={cn(
+                          "h-4 w-4",
+                          model === "gemini-pro" ? "text-primary" : "text-muted-foreground"
+                        )} />
+                        <div className="text-left">
+                          <div className="text-body-small font-medium">Gemini Pro</div>
+                          <div className="text-caption text-muted-foreground">Google's general-purpose model</div>
+                        </div>
+                      </div>
+                    </motion.button>
+                    <motion.button
+                      type="button"
+                      onClick={() => setModel("gemini-1.5-flash")}
+                      whileTap={{ scale: 0.97 }}
+                      transition={{ duration: 0.15 }}
+                      className={cn(
+                        "flex-1 px-4 py-3 rounded-md border transition-all",
+                        model === "gemini-1.5-flash"
+                          ? "border-primary bg-primary/10 text-primary"
+                          : "border-border hover:border-primary/50 hover:bg-accent"
+                      )}
+                    >
+                      <div className="flex items-center gap-3">
+                        <Zap className={cn(
+                          "h-4 w-4",
+                          model === "gemini-1.5-flash" ? "text-primary" : "text-muted-foreground"
+                        )} />
+                        <div className="text-left">
+                          <div className="text-body-small font-medium">Gemini 1.5 Flash</div>
+                          <div className="text-caption text-muted-foreground">Fast and efficient multimodal model</div>
+                        </div>
+                      </div>
+                    </motion.button>
+                  </div>
+                </div>
+              )}
+              {selectedProvider === "openai" && (
+                <div className="space-y-2 mt-4">
+                  <Label className="text-caption text-muted-foreground">Model</Label>
+                  <div className="flex flex-col sm:flex-row gap-2">
+                    <motion.button
+                      type="button"
+                      onClick={() => setModel("gpt-4o")}
+                      whileTap={{ scale: 0.97 }}
+                      transition={{ duration: 0.15 }}
+                      className={cn(
+                        "flex-1 px-4 py-3 rounded-md border transition-all",
+                        model === "gpt-4o"
+                          ? "border-primary bg-primary/10 text-primary"
+                          : "border-border hover:border-primary/50 hover:bg-accent"
+                      )}
+                    >
+                      <div className="flex items-center gap-3">
+                        <Zap className={cn(
+                          "h-4 w-4",
+                          model === "gpt-4o" ? "text-primary" : "text-muted-foreground"
+                        )} />
+                        <div className="text-left">
+                          <div className="text-body-small font-medium">GPT-4o</div>
+                          <div className="text-caption text-muted-foreground">OpenAI's most advanced, multimodal model</div>
+                        </div>
+                      </div>
+                    </motion.button>
+                    <motion.button
+                      type="button"
+                      onClick={() => setModel("gpt-3.5-turbo")}
+                      whileTap={{ scale: 0.97 }}
+                      transition={{ duration: 0.15 }}
+                      className={cn(
+                        "flex-1 px-4 py-3 rounded-md border transition-all",
+                        model === "gpt-3.5-turbo"
+                          ? "border-primary bg-primary/10 text-primary"
+                          : "border-border hover:border-primary/50 hover:bg-accent"
+                      )}
+                    >
+                      <div className="flex items-center gap-3">
+                        <Zap className={cn(
+                          "h-4 w-4",
+                          model === "gpt-3.5-turbo" ? "text-primary" : "text-muted-foreground"
+                        )} />
+                        <div className="text-left">
+                          <div className="text-body-small font-medium">GPT-3.5 Turbo</div>
+                          <div className="text-caption text-muted-foreground">Fast and cost-effective</div>
+                        </div>
+                      </div>
+                    </motion.button>
+                  </div>
+                </div>
+              )}
+              {selectedProvider === "qwen" && (
+                <div className="space-y-2 mt-4">
+                  <Label className="text-caption text-muted-foreground">Model</Label>
+                  <div className="flex flex-col sm:flex-row gap-2">
+                    <motion.button
+                      type="button"
+                      onClick={() => setModel("qwen-plus")}
+                      whileTap={{ scale: 0.97 }}
+                      transition={{ duration: 0.15 }}
+                      className={cn(
+                        "flex-1 px-4 py-3 rounded-md border transition-all",
+                        model === "qwen-plus"
+                          ? "border-primary bg-primary/10 text-primary"
+                          : "border-border hover:border-primary/50 hover:bg-accent"
+                      )}
+                    >
+                      <div className="flex items-center gap-3">
+                        <Zap className={cn(
+                          "h-4 w-4",
+                          model === "qwen-plus" ? "text-primary" : "text-muted-foreground"
+                        )} />
+                        <div className="text-left">
+                          <div className="text-body-small font-medium">Qwen-Plus</div>
+                          <div className="text-caption text-muted-foreground">Alibaba's powerful model</div>
+                        </div>
+                      </div>
+                    </motion.button>
+                    <motion.button
+                      type="button"
+                      onClick={() => setModel("qwen-turbo")}
+                      whileTap={{ scale: 0.97 }}
+                      transition={{ duration: 0.15 }}
+                      className={cn(
+                        "flex-1 px-4 py-3 rounded-md border transition-all",
+                        model === "qwen-turbo"
+                          ? "border-primary bg-primary/10 text-primary"
+                          : "border-border hover:border-primary/50 hover:bg-accent"
+                      )}
+                    >
+                      <div className="flex items-center gap-3">
+                        <Zap className={cn(
+                          "h-4 w-4",
+                          model === "qwen-turbo" ? "text-primary" : "text-muted-foreground"
+                        )} />
+                        <div className="text-left">
+                          <div className="text-body-small font-medium">Qwen-Turbo</div>
+                          <div className="text-caption text-muted-foreground">Fast and efficient Qwen model</div>
+                        </div>
+                      </div>
+                    </motion.button>
+                  </div>
+                </div>
+              )}
             </Card>
 
             {/* Configuration */}

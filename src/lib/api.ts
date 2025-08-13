@@ -119,6 +119,7 @@ export interface Agent {
   system_prompt: string;
   default_task?: string;
   model: string;
+  provider: string;
   hooks?: string; // JSON string of HooksConfiguration
   created_at: string;
   updated_at: string;
@@ -152,6 +153,7 @@ export interface AgentRun {
   agent_icon: string;
   task: string;
   model: string;
+  provider: string;
   project_path: string;
   session_id: string;
   status: string; // 'pending', 'running', 'completed', 'failed', 'cancelled'
@@ -186,6 +188,43 @@ export interface AgentRunWithMetrics {
   completed_at?: string;
   metrics?: AgentRunMetrics;
   output?: string; // Real-time JSONL content
+}
+
+// Define a generic stream message type
+export interface AgentStreamMessage {
+  type: "user" | "assistant" | "tool" | "system" | "result";
+  subtype?: string; // e.g., "init", "info", "error"
+  tool_calls?: any[];
+  message?: {
+    content: Array<{
+      type: "text" | "tool_use" | "tool_result";
+      text?: string;
+      name?: string; // For tool_use
+      input?: any; // For tool_use
+      id?: string; // For tool_use
+      tool_use_id?: string; // For tool_result
+      content?: any; // For tool_result
+      is_error?: boolean; // For tool_result
+    }>;
+    usage?: {
+      input_tokens: number;
+      output_tokens: number;
+    };
+  };
+  usage?: { // For top-level usage in some messages
+    input_tokens: number;
+    output_tokens: number;
+  };
+  session_id?: string;
+  model?: string;
+  cwd?: string;
+  tools?: string[];
+  result?: string;
+  error?: string;
+  timestamp?: string;
+  isMeta?: boolean; // For internal messages not meant for display
+  leafUuid?: string; // For internal messages
+  summary?: string; // For internal messages
 }
 
 // Usage Dashboard types
@@ -708,6 +747,7 @@ export const api = {
     system_prompt: string, 
     default_task?: string, 
     model?: string,
+    provider?: string,
     hooks?: string
   ): Promise<Agent> {
     try {
@@ -717,6 +757,7 @@ export const api = {
         systemPrompt: system_prompt,
         defaultTask: default_task,
         model,
+        provider,
         hooks
       });
     } catch (error) {
@@ -743,6 +784,7 @@ export const api = {
     system_prompt: string, 
     default_task?: string, 
     model?: string,
+    provider?: string,
     hooks?: string
   ): Promise<Agent> {
     try {
@@ -753,6 +795,7 @@ export const api = {
         systemPrompt: system_prompt,
         defaultTask: default_task,
         model,
+        provider,
         hooks
       });
     } catch (error) {
@@ -839,9 +882,9 @@ export const api = {
    * @param model - Optional model override
    * @returns Promise resolving to the run ID when execution starts
    */
-  async executeAgent(agentId: number, projectPath: string, task: string, model?: string): Promise<number> {
+  async executeAgent(agentId: number, projectPath: string, task: string, model: string, provider: string): Promise<number> {
     try {
-      return await invoke<number>('execute_agent', { agentId, projectPath, task, model });
+      return await invoke<number>('execute_agent', { agentId, projectPath, task, model, provider });
     } catch (error) {
       console.error("Failed to execute agent:", error);
       // Return a sentinel value to indicate error
@@ -1025,51 +1068,7 @@ export const api = {
     }
   },
 
-  /**
-   * Executes a new interactive Claude Code session with streaming output
-   */
-  async executeClaudeCode(projectPath: string, prompt: string, model: string): Promise<void> {
-    return invoke("execute_claude_code", { projectPath, prompt, model });
-  },
-
-  /**
-   * Continues an existing Claude Code conversation with streaming output
-   */
-  async continueClaudeCode(projectPath: string, prompt: string, model: string): Promise<void> {
-    return invoke("continue_claude_code", { projectPath, prompt, model });
-  },
-
-  /**
-   * Resumes an existing Claude Code session by ID with streaming output
-   */
-  async resumeClaudeCode(projectPath: string, sessionId: string, prompt: string, model: string): Promise<void> {
-    return invoke("resume_claude_code", { projectPath, sessionId, prompt, model });
-  },
-
-  /**
-   * Cancels the currently running Claude Code execution
-   * @param sessionId - Optional session ID to cancel a specific session
-   */
-  async cancelClaudeExecution(sessionId?: string): Promise<void> {
-    return invoke("cancel_claude_execution", { sessionId });
-  },
-
-  /**
-   * Lists all currently running Claude sessions
-   * @returns Promise resolving to list of running Claude sessions
-   */
-  async listRunningClaudeSessions(): Promise<any[]> {
-    return invoke("list_running_claude_sessions");
-  },
-
-  /**
-   * Gets live output from a Claude session
-   * @param sessionId - The session ID to get output for
-   * @returns Promise resolving to the current live output
-   */
-  async getClaudeSessionOutput(sessionId: string): Promise<string> {
-    return invoke("get_claude_session_output", { sessionId });
-  },
+  
 
   /**
    * Lists files and directories in a given path

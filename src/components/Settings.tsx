@@ -22,7 +22,7 @@ import {
 } from "@/lib/api";
 import { cn } from "@/lib/utils";
 import { Toast, ToastContainer } from "@/components/ui/toast";
-import { ClaudeVersionSelector } from "./ClaudeVersionSelector";
+import { ClaudeInstallationSelector } from "./ClaudeInstallationSelector";
 import { StorageTab } from "./StorageTab";
 import { HooksEditor } from "./HooksEditor";
 import { SlashCommandsManager } from "./SlashCommandsManager";
