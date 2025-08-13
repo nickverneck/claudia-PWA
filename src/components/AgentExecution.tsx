@@ -99,6 +99,18 @@ export const AgentExecution: React.FC<AgentExecutionProps> = ({
   const [rawJsonlOutput, setRawJsonlOutput] = useState<string[]>([]);
   const [error, setError] = useState<string | null>(null);
   const [copyPopoverOpen, setCopyPopoverOpen] = useState(false);
+  const provider = (agent as any).provider || 'claude';
+
+  const getModelDisplayName = (prov: string, m: string): string => {
+    if (prov === 'claude') {
+      return m === 'opus' ? 'Claude 4 Opus' : 'Claude 4 Sonnet';
+    }
+    if (prov === 'gemini') {
+      if (m === 'gemini-2.5-pro') return 'Gemini 2.5 Pro';
+      if (m === 'gemini-2.5-flash') return 'Gemini 2.5 Flash';
+    }
+    return m;
+  };
   
   // Analytics tracking
   const trackEvent = useTrackEvent();
@@ -498,7 +510,7 @@ export const AgentExecution: React.FC<AgentExecutionProps> = ({
   const handleCopyAsMarkdown = async () => {
     let markdown = `# Agent Execution: ${agent.name}\n\n`;
     markdown += `**Task:** ${task}\n`;
-    markdown += `**Model:** ${model === 'opus' ? 'Claude 4 Opus' : 'Claude 4 Sonnet'}\n`;
+    markdown += `**Model:** ${getModelDisplayName(provider, model)}\n`;
     markdown += `**Date:** ${new Date().toISOString()}\n\n`;
     markdown += `---\n\n`;
 
@@ -582,7 +594,7 @@ export const AgentExecution: React.FC<AgentExecutionProps> = ({
               <div>
                 <h1 className="text-heading-1">{agent.name}</h1>
                 <p className="mt-1 text-body-small text-muted-foreground">
-                  {isRunning ? 'Running' : messages.length > 0 ? 'Complete' : 'Ready'} • {model === 'opus' ? 'Claude 4 Opus' : 'Claude 4 Sonnet'}
+                  {isRunning ? 'Running' : messages.length > 0 ? 'Complete' : 'Ready'} • {getModelDisplayName(provider, model)}
                 </p>
               </div>
             </div>
@@ -621,67 +633,137 @@ export const AgentExecution: React.FC<AgentExecutionProps> = ({
             {/* Model Selection */}
             <div className="space-y-3">
               <Label className="text-caption text-muted-foreground">Model Selection</Label>
-              <div className="flex gap-2">
-                <motion.button
-                  type="button"
-                  onClick={() => !isRunning && setModel("sonnet")}
-                  whileTap={{ scale: 0.97 }}
-                  transition={{ duration: 0.15 }}
-                  className={cn(
-                    "flex-1 px-4 py-3 rounded-md border transition-all",
-                    model === "sonnet" 
-                      ? "border-primary bg-primary/10 text-primary" 
-                      : "border-border hover:border-primary/50 hover:bg-accent",
-                    isRunning && "opacity-50 cursor-not-allowed"
-                  )}
-                  disabled={isRunning}
-                >
-                  <div className="flex items-center gap-3">
-                    <div className={cn(
-                      "w-4 h-4 rounded-full border-2 flex items-center justify-center",
-                      model === "sonnet" ? "border-primary" : "border-muted-foreground"
-                    )}>
-                      {model === "sonnet" && (
-                        <div className="w-2 h-2 rounded-full bg-primary" />
-                      )}
+              {provider === 'claude' && (
+                <div className="flex gap-2">
+                  <motion.button
+                    type="button"
+                    onClick={() => !isRunning && setModel("sonnet")}
+                    whileTap={{ scale: 0.97 }}
+                    transition={{ duration: 0.15 }}
+                    className={cn(
+                      "flex-1 px-4 py-3 rounded-md border transition-all",
+                      model === "sonnet" 
+                        ? "border-primary bg-primary/10 text-primary" 
+                        : "border-border hover:border-primary/50 hover:bg-accent",
+                      isRunning && "opacity-50 cursor-not-allowed"
+                    )}
+                    disabled={isRunning}
+                  >
+                    <div className="flex items-center gap-3">
+                      <div className={cn(
+                        "w-4 h-4 rounded-full border-2 flex items-center justify-center",
+                        model === "sonnet" ? "border-primary" : "border-muted-foreground"
+                      )}>
+                        {model === "sonnet" && (
+                          <div className="w-2 h-2 rounded-full bg-primary" />
+                        )}
+                      </div>
+                      <div className="text-left">
+                        <div className="text-body-small font-medium">Claude 4 Sonnet</div>
+                        <div className="text-caption text-muted-foreground">Faster, efficient</div>
+                      </div>
                     </div>
-                    <div className="text-left">
-                      <div className="text-body-small font-medium">Claude 4 Sonnet</div>
-                      <div className="text-caption text-muted-foreground">Faster, efficient</div>
+                  </motion.button>
+                  
+                  <motion.button
+                    type="button"
+                    onClick={() => !isRunning && setModel("opus")}
+                    whileTap={{ scale: 0.97 }}
+                    transition={{ duration: 0.15 }}
+                    className={cn(
+                      "flex-1 px-4 py-3 rounded-md border transition-all",
+                      model === "opus" 
+                        ? "border-primary bg-primary/10 text-primary" 
+                        : "border-border hover:border-primary/50 hover:bg-accent",
+                      isRunning && "opacity-50 cursor-not-allowed"
+                    )}
+                    disabled={isRunning}
+                  >
+                    <div className="flex items-center gap-3">
+                      <div className={cn(
+                        "w-4 h-4 rounded-full border-2 flex items-center justify-center",
+                        model === "opus" ? "border-primary" : "border-muted-foreground"
+                      )}>
+                        {model === "opus" && (
+                          <div className="w-2 h-2 rounded-full bg-primary" />
+                        )}
+                      </div>
+                      <div className="text-left">
+                        <div className="text-body-small font-medium">Claude 4 Opus</div>
+                        <div className="text-caption text-muted-foreground">More capable</div>
+                      </div>
                     </div>
-                  </div>
-                </motion.button>
-                
-                <motion.button
-                  type="button"
-                  onClick={() => !isRunning && setModel("opus")}
-                  whileTap={{ scale: 0.97 }}
-                  transition={{ duration: 0.15 }}
-                  className={cn(
-                    "flex-1 px-4 py-3 rounded-md border transition-all",
-                    model === "opus" 
-                      ? "border-primary bg-primary/10 text-primary" 
-                      : "border-border hover:border-primary/50 hover:bg-accent",
-                    isRunning && "opacity-50 cursor-not-allowed"
-                  )}
-                  disabled={isRunning}
-                >
-                  <div className="flex items-center gap-3">
-                    <div className={cn(
-                      "w-4 h-4 rounded-full border-2 flex items-center justify-center",
-                      model === "opus" ? "border-primary" : "border-muted-foreground"
-                    )}>
-                      {model === "opus" && (
-                        <div className="w-2 h-2 rounded-full bg-primary" />
-                      )}
+                  </motion.button>
+                </div>
+              )}
+              {provider === 'gemini' && (
+                <div className="flex gap-2">
+                  <motion.button
+                    type="button"
+                    onClick={() => !isRunning && setModel("gemini-2.5-pro")}
+                    whileTap={{ scale: 0.97 }}
+                    transition={{ duration: 0.15 }}
+                    className={cn(
+                      "flex-1 px-4 py-3 rounded-md border transition-all",
+                      model === "gemini-2.5-pro" 
+                        ? "border-primary bg-primary/10 text-primary" 
+                        : "border-border hover:border-primary/50 hover:bg-accent",
+                      isRunning && "opacity-50 cursor-not-allowed"
+                    )}
+                    disabled={isRunning}
+                  >
+                    <div className="flex items-center gap-3">
+                      <div className={cn(
+                        "w-4 h-4 rounded-full border-2 flex items-center justify-center",
+                        model === "gemini-2.5-pro" ? "border-primary" : "border-muted-foreground"
+                      )}>
+                        {model === "gemini-2.5-pro" && (
+                          <div className="w-2 h-2 rounded-full bg-primary" />
+                        )}
+                      </div>
+                      <div className="text-left">
+                        <div className="text-body-small font-medium">Gemini 2.5 Pro</div>
+                        <div className="text-caption text-muted-foreground">General purpose</div>
+                      </div>
                     </div>
-                    <div className="text-left">
-                      <div className="text-body-small font-medium">Claude 4 Opus</div>
-                      <div className="text-caption text-muted-foreground">More capable</div>
+                  </motion.button>
+                  
+                  <motion.button
+                    type="button"
+                    onClick={() => !isRunning && setModel("gemini-2.5-flash")}
+                    whileTap={{ scale: 0.97 }}
+                    transition={{ duration: 0.15 }}
+                    className={cn(
+                      "flex-1 px-4 py-3 rounded-md border transition-all",
+                      model === "gemini-2.5-flash" 
+                        ? "border-primary bg-primary/10 text-primary" 
+                        : "border-border hover:border-primary/50 hover:bg-accent",
+                      isRunning && "opacity-50 cursor-not-allowed"
+                    )}
+                    disabled={isRunning}
+                  >
+                    <div className="flex items-center gap-3">
+                      <div className={cn(
+                        "w-4 h-4 rounded-full border-2 flex items-center justify-center",
+                        model === "gemini-2.5-flash" ? "border-primary" : "border-muted-foreground"
+                      )}>
+                        {model === "gemini-2.5-flash" && (
+                          <div className="w-2 h-2 rounded-full bg-primary" />
+                        )}
+                      </div>
+                      <div className="text-left">
+                        <div className="text-body-small font-medium">Gemini 2.5 Flash</div>
+                        <div className="text-caption text-muted-foreground">Faster, cost-efficient</div>
+                      </div>
                     </div>
-                  </div>
-                </motion.button>
-              </div>
+                  </motion.button>
+                </div>
+              )}
+              {provider !== 'claude' && provider !== 'gemini' && (
+                <div className="text-caption text-muted-foreground">
+                  Using model: <span className="font-medium">{model}</span>
+                </div>
+              )}
             </div>
 
             {/* Task Input */}
