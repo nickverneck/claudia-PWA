@@ -12,7 +12,7 @@ use log::{info, error};
 use crate::cli_executors::{
     claude as claude_exec,
     gemini as gemini_exec,
-    openai_codex as openai_exec,
+    codex as openai_exec,
     qwen as qwen_exec,
     aider as aider_exec,
 };
@@ -122,15 +122,15 @@ pub async fn execute_cli_command(
             cmd_builder
         },
         CliProvider::OpenAI => {
-            info!("Executing OpenAI Codex command with model: {}", model);
-            let installations = openai_exec::discover_openai_codex_installations();
-            let openai_codex_path = if let Some(best) = openai_exec::select_best_installation(installations) {
+            info!("Executing Codex command with model: {}", model);
+            let installations = openai_exec::discover_codex_installations();
+            let codex_path = if let Some(best) = openai_exec::select_best_installation(installations) {
                 best.path
             } else {
-                error!("No valid OpenAI Codex installation found.");
-                return Err("No valid OpenAI Codex installation found.".to_string());
+                error!("No valid Codex installation found.");
+                return Err("No valid Codex installation found.".to_string());
             };
-            let mut cmd_builder = create_tokio_command_with_env(&openai_codex_path);
+            let mut cmd_builder = create_tokio_command_with_env(&codex_path);
             cmd_builder.args(&["run", "--model", &model, "--project", &project_path, "--task", &task]);
             cmd_builder
         },

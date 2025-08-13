@@ -435,12 +435,12 @@ export const CreateAgent: React.FC<CreateAgentProps> = ({
                   <div className="flex flex-col sm:flex-row gap-2">
                     <motion.button
                       type="button"
-                      onClick={() => setModel("gemini-pro")}
+                      onClick={() => setModel("gemini-2.5-pro")}
                       whileTap={{ scale: 0.97 }}
                       transition={{ duration: 0.15 }}
                       className={cn(
                         "flex-1 px-4 py-3 rounded-md border transition-all",
-                        model === "gemini-pro"
+                        model === "gemini-2.5-pro"
                           ? "border-primary bg-primary/10 text-primary"
                           : "border-border hover:border-primary/50 hover:bg-accent"
                       )}
@@ -448,22 +448,22 @@ export const CreateAgent: React.FC<CreateAgentProps> = ({
                       <div className="flex items-center gap-3">
                         <Zap className={cn(
                           "h-4 w-4",
-                          model === "gemini-pro" ? "text-primary" : "text-muted-foreground"
+                          model === "gemini-2.5-pro" ? "text-primary" : "text-muted-foreground"
                         )} />
                         <div className="text-left">
-                          <div className="text-body-small font-medium">Gemini Pro</div>
-                          <div className="text-caption text-muted-foreground">Google's general-purpose model</div>
+                          <div className="text-body-small font-medium">Gemini 2.5 Pro</div>
+                          <div className="text-caption text-muted-foreground">Advanced, large context window</div>
                         </div>
                       </div>
                     </motion.button>
                     <motion.button
                       type="button"
-                      onClick={() => setModel("gemini-1.5-flash")}
+                      onClick={() => setModel("gemini-2.5-flash")}
                       whileTap={{ scale: 0.97 }}
                       transition={{ duration: 0.15 }}
                       className={cn(
                         "flex-1 px-4 py-3 rounded-md border transition-all",
-                        model === "gemini-1.5-flash"
+                        model === "gemini-2.5-flash"
                           ? "border-primary bg-primary/10 text-primary"
                           : "border-border hover:border-primary/50 hover:bg-accent"
                       )}
@@ -471,11 +471,11 @@ export const CreateAgent: React.FC<CreateAgentProps> = ({
                       <div className="flex items-center gap-3">
                         <Zap className={cn(
                           "h-4 w-4",
-                          model === "gemini-1.5-flash" ? "text-primary" : "text-muted-foreground"
+                          model === "gemini-2.5-flash" ? "text-primary" : "text-muted-foreground"
                         )} />
                         <div className="text-left">
-                          <div className="text-body-small font-medium">Gemini 1.5 Flash</div>
-                          <div className="text-caption text-muted-foreground">Fast and efficient multimodal model</div>
+                          <div className="text-body-small font-medium">Gemini 2.5 Flash</div>
+                          <div className="text-caption text-muted-foreground">Optimized for speed and efficiency</div>
                         </div>
                       </div>
                     </motion.button>

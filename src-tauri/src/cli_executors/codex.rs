@@ -1,4 +1,4 @@
-// src-tauri/src/cli_executors/openai_codex.rs
+// src-tauri/src/cli_executors/codex.rs
 
 use anyhow::Result;
 use log::{debug, error, info, warn};
@@ -8,7 +8,7 @@ use std::path::PathBuf;
 use std::process::Command;
 use tauri::Manager;
 
-/// Type of OpenAI Codex installation
+/// Type of Codex installation
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 pub enum InstallationType {
     /// System-installed binary
@@ -17,10 +17,10 @@ pub enum InstallationType {
     Custom,
 }
 
-/// Represents an OpenAI Codex installation with metadata
+/// Represents an Codex installation with metadata
 #[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct OpenAICodexInstallation {
-    /// Full path to the OpenAI Codex binary
+pub struct CodexInstallation {
+    /// Full path to the Codex binary
     pub path: String,
     /// Version string if available
     pub version: Option<String>,
@@ -30,9 +30,9 @@ pub struct OpenAICodexInstallation {
     pub installation_type: InstallationType,
 }
 
-/// Main function to find the OpenAI Codex binary
-pub fn find_openai_codex_binary(app_handle: &tauri::AppHandle) -> Result<String, String> {
-    info!("Searching for openai_codex binary...");
+/// Main function to find the Codex binary
+pub fn find_codex_binary(app_handle: &tauri::AppHandle) -> Result<String, String> {
+    info!("Searching for codex binary...");
 
     // First check if we have a stored path and preference in the database
     if let Ok(app_data_dir) = app_handle.path().app_data_dir() {
@@ -41,29 +41,29 @@ pub fn find_openai_codex_binary(app_handle: &tauri::AppHandle) -> Result<String,
             if let Ok(conn) = rusqlite::Connection::open(&db_path) {
                 // Check for stored path first
                 if let Ok(stored_path) = conn.query_row(
-                    "SELECT value FROM app_settings WHERE key = 'openai_codex_binary_path'",
+                    "SELECT value FROM app_settings WHERE key = 'codex_binary_path'",
                     [],
                     |row| row.get::<_, String>(0),
                 ) {
-                    info!("Found stored openai_codex path in database: {}", stored_path);
+                    info!("Found stored codex path in database: {}", stored_path);
                     
                     // Check if the path still exists
                     let path_buf = PathBuf::from(&stored_path);
                     if path_buf.exists() && path_buf.is_file() {
                         return Ok(stored_path);
                     } else {
-                        warn!("Stored openai_codex path no longer exists: {}", stored_path);
+                        warn!("Stored codex path no longer exists: {}", stored_path);
                     }
                 }
                 
                 // Check user preference
                 let preference = conn.query_row(
-                    "SELECT value FROM app_settings WHERE key = 'openai_codex_installation_preference'",
+                    "SELECT value FROM app_settings WHERE key = 'codex_installation_preference'",
                     [],
                     |row| row.get::<_, String>(0),
                 ).unwrap_or_else(|_| "system".to_string());
                 
-                info!("User preference for OpenAI Codex installation: {}", preference);
+                info!("User preference for Codex installation: {}", preference);
             }
         }
     }
@@ -72,30 +72,30 @@ pub fn find_openai_codex_binary(app_handle: &tauri::AppHandle) -> Result<String,
     let installations = discover_system_installations();
 
     if installations.is_empty() {
-        error!("Could not find openai_codex binary in any location");
-        return Err("OpenAI Codex CLI not found. Please ensure it's installed and in your PATH.".to_string());
+        error!("Could not find codex binary in any location");
+        return Err("Codex CLI not found. Please ensure it's installed and in your PATH.".to_string());
     }
 
     // Log all found installations
     for installation in &installations {
-        info!("Found OpenAI Codex installation: {:?}", installation);
+        info!("Found Codex installation: {:?}", installation);
     }
 
     // Select the best installation (highest version)
     if let Some(best) = select_best_installation(installations) {
         info!(
-            "Selected OpenAI Codex installation: path={}, version={:?}, source={}",
+            "Selected Codex installation: path={}, version={:?}, source={}",
             best.path, best.version, best.source
         );
         Ok(best.path)
     } else {
-        Err("No valid OpenAI Codex installation found".to_string())
+        Err("No valid Codex installation found".to_string())
     }
 }
 
-/// Discovers all available OpenAI Codex installations and returns them for selection
-pub fn discover_openai_codex_installations() -> Vec<OpenAICodexInstallation> {
-    info!("Discovering all OpenAI Codex installations...");
+/// Discovers all available Codex installations and returns them for selection
+pub fn discover_codex_installations() -> Vec<CodexInstallation> {
+    info!("Discovering all Codex installations...");
 
     let mut installations = discover_system_installations();
 
@@ -122,7 +122,7 @@ pub fn discover_openai_codex_installations() -> Vec<OpenAICodexInstallation> {
 }
 
 /// Returns a preference score for installation sources (lower is better)
-fn source_preference(installation: &OpenAICodexInstallation) -> u8 {
+fn source_preference(installation: &CodexInstallation) -> u8 {
     match installation.source.as_str() {
         "which" => 1,
         "homebrew" => 2,
@@ -133,8 +133,8 @@ fn source_preference(installation: &OpenAICodexInstallation) -> u8 {
     }
 }
 
-/// Discovers all OpenAI Codex installations on the system
-fn discover_system_installations() -> Vec<OpenAICodexInstallation> {
+/// Discovers all Codex installations on the system
+fn discover_system_installations() -> Vec<CodexInstallation> {
     let mut installations = Vec::new();
 
     // 1. Try 'which' command first
@@ -152,11 +152,11 @@ fn discover_system_installations() -> Vec<OpenAICodexInstallation> {
     installations
 }
 
-/// Try using the 'which' command to find OpenAI Codex
-fn try_which_command() -> Option<OpenAICodexInstallation> {
-    debug!("Trying 'which openai_codex' to find binary...");
+/// Try using the 'which' command to find Codex
+fn try_which_command() -> Option<CodexInstallation> {
+    debug!("Trying 'which codex' to find binary...");
 
-    match Command::new("which").arg("openai_codex").output() {
+    match Command::new("which").arg("codex").output() {
         Ok(output) if output.status.success() => {
             let output_str = String::from_utf8_lossy(&output.stdout).trim().to_string();
 
@@ -164,7 +164,7 @@ fn try_which_command() -> Option<OpenAICodexInstallation> {
                 return None;
             }
 
-            let path = if output_str.starts_with("openai_codex:") && output_str.contains("aliased to") {
+            let path = if output_str.starts_with("codex:") && output_str.contains("aliased to") {
                 output_str
                     .split("aliased to")
                     .nth(1)
@@ -173,7 +173,7 @@ fn try_which_command() -> Option<OpenAICodexInstallation> {
                 Some(output_str)
             }?;
 
-            debug!("'which' found openai_codex at: {}", path);
+            debug!("'which' found codex at: {}", path);
 
             // Verify the path exists
             if !PathBuf::from(&path).exists() {
@@ -182,9 +182,9 @@ fn try_which_command() -> Option<OpenAICodexInstallation> {
             }
 
             // Get version
-            let version = get_openai_codex_version(&path).ok().flatten();
+            let version = get_codex_version(&path).ok().flatten();
 
-            Some(OpenAICodexInstallation {
+            Some(CodexInstallation {
                 path,
                 version,
                 source: "which".to_string(),
@@ -196,25 +196,25 @@ fn try_which_command() -> Option<OpenAICodexInstallation> {
 }
 
 /// Check standard installation paths
-fn find_standard_installations() -> Vec<OpenAICodexInstallation> {
+fn find_standard_installations() -> Vec<CodexInstallation> {
     let mut installations = Vec::new();
 
-    // Common installation paths for openai_codex
+    // Common installation paths for codex
     let mut paths_to_check: Vec<(String, String)> = vec![
-        ("/usr/local/bin/openai_codex".to_string(), "system".to_string()),
+        ("/usr/local/bin/codex".to_string(), "system".to_string()),
         (
-            "/opt/homebrew/bin/openai_codex".to_string(),
+            "/opt/homebrew/bin/codex".to_string(),
             "homebrew".to_string(),
         ),
-        ("/usr/bin/openai_codex".to_string(), "system".to_string()),
-        ("/bin/openai_codex".to_string(), "system".to_string()),
+        ("/usr/bin/codex".to_string(), "system".to_string()),
+        ("/bin/codex".to_string(), "system".to_string()),
     ];
 
     // Also check user-specific paths
     if let Ok(home) = std::env::var("HOME") {
         paths_to_check.extend(vec![
             (
-                format!("{}/.local/bin/openai_codex", home),
+                format!("{}/.local/bin/codex", home),
                 "local-bin".to_string(),
             ),
         ]);
@@ -224,12 +224,12 @@ fn find_standard_installations() -> Vec<OpenAICodexInstallation> {
     for (path, source) in paths_to_check {
         let path_buf = PathBuf::from(&path);
         if path_buf.exists() && path_buf.is_file() {
-            debug!("Found openai_codex at standard path: {} ({})", path, source);
+            debug!("Found codex at standard path: {} ({})", path, source);
 
             // Get version
-            let version = get_openai_codex_version(&path).ok().flatten();
+            let version = get_codex_version(&path).ok().flatten();
 
-            installations.push(OpenAICodexInstallation {
+            installations.push(CodexInstallation {
                 path,
                 version,
                 source,
@@ -238,14 +238,14 @@ fn find_standard_installations() -> Vec<OpenAICodexInstallation> {
         }
     }
 
-    // Also check if openai_codex is available in PATH (without full path)
-    if let Ok(output) = Command::new("openai_codex").arg("--version").output() {
+    // Also check if codex is available in PATH (without full path)
+    if let Ok(output) = Command::new("codex").arg("--version").output() {
         if output.status.success() {
-            debug!("openai_codex is available in PATH");
+            debug!("codex is available in PATH");
             let version = extract_version_from_output(&output.stdout);
 
-            installations.push(OpenAICodexInstallation {
-                path: "openai_codex".to_string(),
+            installations.push(CodexInstallation {
+                path: "codex".to_string(),
                 version,
                 source: "PATH".to_string(),
                 installation_type: InstallationType::System,
@@ -256,8 +256,8 @@ fn find_standard_installations() -> Vec<OpenAICodexInstallation> {
     installations
 }
 
-/// Get OpenAI Codex version by running --version command
-fn get_openai_codex_version(path: &str) -> Result<Option<String>, String> {
+/// Get Codex version by running --version command
+fn get_codex_version(path: &str) -> Result<Option<String>, String> {
     match Command::new(path).arg("--version").output() {
         Ok(output) => {
             if output.status.success() {
@@ -296,16 +296,16 @@ fn extract_version_from_output(stdout: &[u8]) -> Option<String> {
 }
 
 /// Select the best installation based on version
-pub fn select_best_installation(installations: Vec<OpenAICodexInstallation>) -> Option<OpenAICodexInstallation> {
+pub fn select_best_installation(installations: Vec<CodexInstallation>) -> Option<CodexInstallation> {
     installations.into_iter().max_by(|a, b| {
         match (&a.version, &b.version) {
             (Some(v1), Some(v2)) => compare_versions(v1, v2),
             (Some(_), None) => Ordering::Greater,
             (None, Some(_)) => Ordering::Less,
             (None, None) => {
-                if a.path == "openai_codex" && b.path != "openai_codex" {
+                if a.path == "codex" && b.path != "codex" {
                     Ordering::Less
-                } else if a.path != "openai_codex" && b.path == "openai_codex" {
+                } else if a.path != "codex" && b.path == "codex" {
                     Ordering::Greater
                 } else {
                     Ordering::Equal
@@ -351,66 +351,3 @@ fn compare_versions(a: &str, b: &str) -> Ordering {
     Ordering::Equal
 }
 
-/// Helper function to create a Command with proper environment variables
-pub fn create_command_with_env(program: &str) -> Command {
-    let mut cmd = Command::new(program);
-    
-    info!("Creating command for: {}", program);
-
-    for (key, value) in std::env::vars() {
-        if key == "PATH"
-            || key == "HOME"
-            || key == "USER"
-            || key == "SHELL"
-            || key == "LANG"
-            || key == "LC_ALL"
-            || key.starts_with("LC_")
-            || key == "NODE_PATH"
-            || key == "NVM_DIR"
-            || key == "NVM_BIN"
-            || key == "HOMEBREW_PREFIX"
-            || key == "HOMEBREW_CELLAR"
-            || key == "HTTP_PROXY"
-            || key == "HTTPS_PROXY"
-            || key == "NO_PROXY"
-            || key == "ALL_PROXY"
-        {
-            debug!("Inheriting env var: {}={}", key, value);
-            cmd.env(&key, &value);
-        }
-    }
-    
-    info!("Command will use proxy settings:");
-    if let Ok(http_proxy) = std::env::var("HTTP_PROXY") {
-        info!("  HTTP_PROXY={}", http_proxy);
-    }
-    if let Ok(https_proxy) = std::env::var("HTTPS_PROXY") {
-        info!("  HTTPS_PROXY={}", https_proxy);
-    }
-
-    if program.contains("/.nvm/versions/node/") {
-        if let Some(node_bin_dir) = std::path::Path::new(program).parent() {
-            let current_path = std::env::var("PATH").unwrap_or_default();
-            let node_bin_str = node_bin_dir.to_string_lossy();
-            if !current_path.contains(&node_bin_str.as_ref()) {
-                let new_path = format!("{}:{}", node_bin_str, current_path);
-                debug!("Adding NVM bin directory to PATH: {}", new_path);
-                cmd.env("PATH", new_path);
-            }
-        }
-    }
-    
-    if program.contains("/homebrew/") || program.contains("/opt/homebrew/") {
-        if let Some(program_dir) = std::path::Path::new(program).parent() {
-            let current_path = std::env::var("PATH").unwrap_or_default();
-            let homebrew_bin_str = program_dir.to_string_lossy();
-            if !current_path.contains(&homebrew_bin_str.as_ref()) {
-                let new_path = format!("{}:{}", homebrew_bin_str, current_path);
-                debug!("Adding Homebrew bin directory to PATH: {}", new_path);
-                cmd.env("PATH", new_path);
-            }
-        }
-    }
-
-    cmd
-}

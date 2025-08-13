@@ -106,8 +106,15 @@ const agentStore: StateCreator<
     // Create a new agent run
     createAgentRun: async (data: { agentId: number; projectPath: string; task: string; model?: string; provider?: string }) => {
       try {
-        const model = (data.model === 'opus' || data.model === 'sonnet') ? data.model : 'sonnet';
         const provider = data.provider ?? 'claude';
+        let model = data.model;
+
+        if (provider === 'claude') {
+          model = (model === 'opus' || model === 'sonnet') ? model : 'sonnet';
+        } else if (provider === 'gemini') {
+          model = (model === 'gemini-2.5-pro' || model === 'gemini-2.5-flash') ? model : 'gemini-2.5-pro';
+        }
+        
         const runId = await api.executeAgent(data.agentId, data.projectPath, data.task, model, provider);
         
         // Fetch the created run details
@@ -116,7 +123,7 @@ const agentStore: StateCreator<
         // Update local state immediately
         set((state) => ({
           agentRuns: [run, ...state.agentRuns],
-          runningAgents: new Set([...state.runningAgents, runId.toString()])
+          runningAgents: new Set([...state.runningAgents, run.id.toString()])
         }));
         
         return run;

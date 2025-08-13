@@ -2,7 +2,7 @@
 
 This document outlines the detailed tasks required to integrate new CLI tools into the Claudia application, along with their current status.
 
-## Overall Status: Running
+## Overall Status: Completed
 
 ---
 
@@ -53,23 +53,20 @@ This document outlines the detailed tasks required to integrate new CLI tools in
 ### 3. Backend CLI Abstraction
 
 *   **Task**: Generalize the Rust backend's CLI invocation logic.
-    *   **Status**: Running
+    *   **Status**: Success
     *   **Sub-tasks**:
         *   **3.1**: Create `src-tauri/src/cli_manager.rs` for generic CLI execution.
             *   **Status**: Success
         *   **3.2**: Refactor `src-tauri/src/claude_binary.rs` into `src-tauri/src/cli_executors/claude.rs` (or similar) and integrate with `cli_manager.rs`.
-            *   **Status**: Running
+            *   **Status**: Success
         *   **3.3**: Implement `src-tauri/src/cli_executors/gemini.rs` for Gemini CLI invocation.
-            *   **Status**: Empty
-            **Research**: Gemini CLI command arguments and output.
-        *   **3.4**: Implement `src-tauri/src/cli_executors/openai_codex.rs` for OpenAI Codex CLI invocation.
-            *   **Status**: Empty
-            **Research**: OpenAI Codex CLI command arguments and output.
+            *   **Status**: Success
+        *   **3.4**: Implement `src-tauri/src/cli_executors/codex.rs` for Codex CLI invocation.
+            *   **Status**: Success
         *   **3.5**: Implement `src-tauri/src/cli_executors/qwen.rs` for Qwen3 Coder invocation.
-            *   **Status**: Empty
-            **Research**: Qwen3 Coder command arguments and output.
+            *   **Status**: Success
         *   **3.6**: Implement `src-tauri/src/cli_executors/aider.rs` (placeholder/disabled).
-            *   **Status**: Empty
+            *   **Status**: Success
         *   **3.7**: Update Tauri commands in `src-tauri/src/commands/` to use `cli_manager.rs`.
     *   **Status**: Success
         *   **3.8**: Review and update `src-tauri/tauri.conf.json` for new binaries/permissions.
