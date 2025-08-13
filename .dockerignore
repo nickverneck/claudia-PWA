@@ -1,0 +1,19 @@
+# Ignore build artifacts
+/dist
+/node_modules
+/src-tauri/target
+
+# Ignore IDE and OS files
+.vscode/
+.idea/
+.DS_Store
+
+# Ignore log files
+*.log
+
+# Ignore local environment files
+.env*
+!/.env.example
+
+# Ignore git directory
+.git
