@@ -6,7 +6,7 @@ use tokio::process::{Child, Command};
 use std::collections::HashMap;
 use std::sync::{Arc, Mutex};
 use std::process::Stdio;
-use log::{info, error};
+use log::{info, error, warn};
 
 // Import executor modules to avoid symbol conflicts
 use crate::cli_executors::{
@@ -16,6 +16,7 @@ use crate::cli_executors::{
     qwen as qwen_exec,
     aider as aider_exec,
 };
+use crate::process::ProcessRegistryState;
 
 // Define a generic CLI provider enum
 #[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
@@ -172,6 +173,24 @@ pub async fn execute_cli_command(
 
     let pid = child.id().ok_or("Failed to get process ID".to_string())?;
 
+    // Register this Claude session in the global ProcessRegistry so cancellation/lookups work
+    let run_id_opt: Option<i64> = {
+        let registry = app_handle.state::<ProcessRegistryState>();
+        match registry.0.register_claude_session(
+            session_id.clone(),
+            pid,
+            project_path.clone(),
+            task.clone(),
+            model.clone(),
+        ) {
+            Ok(id) => Some(id),
+            Err(e) => {
+                warn!("Failed to register Claude session in ProcessRegistry: {}", e);
+                None
+            }
+        }
+    };
+
     // Store the running process (clone Arc out of State to avoid lifetime issues)
     let processes_arc: RunningProcesses = {
         let state = app_handle.state::<RunningProcesses>();
@@ -195,6 +214,11 @@ pub async fn execute_cli_command(
         let mut lines = reader.lines();
         while let Some(line) = lines.next_line().await.unwrap_or(None) {
             // Emit a generic event for agent output
+            // Also append to ProcessRegistry live output if available
+            if let Some(run_id) = run_id_opt {
+                let registry = app_handle_clone.state::<ProcessRegistryState>();
+                let _ = registry.0.append_live_output(run_id, &format!("{}\n", line));
+            }
             app_handle_clone.emit(&format!("agent-output:{}", session_id_clone), line).unwrap();
         }
     });
@@ -208,6 +232,10 @@ pub async fn execute_cli_command(
         let mut lines = reader.lines();
         while let Some(line) = lines.next_line().await.unwrap_or(None) {
             // Emit a generic event for agent error
+            if let Some(run_id) = run_id_opt {
+                let registry = app_handle_clone.state::<ProcessRegistryState>();
+                let _ = registry.0.append_live_output(run_id, &format!("{}\n", line));
+            }
             app_handle_clone.emit(&format!("agent-error:{}", session_id_clone), line).unwrap();
         }
     });
@@ -220,7 +248,15 @@ pub async fn execute_cli_command(
         let status = child.wait().await.unwrap();
         let success = status.success();
         // Emit a generic event for agent completion
-        app_handle_clone.emit(&format!("agent-complete:{}", session_id_clone), success).unwrap();
+        app_handle_clone
+            .emit(&format!("agent-complete:{}", session_id_clone), success)
+            .unwrap();
+
+        // Unregister from ProcessRegistry if we registered earlier
+        if let Some(run_id) = run_id_opt {
+            let registry = app_handle_clone.state::<ProcessRegistryState>();
+            let _ = registry.0.unregister_process(run_id);
+        }
 
         // Remove from running processes
         running_processes_clone.lock().unwrap().remove(&pid);

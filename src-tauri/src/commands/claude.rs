@@ -920,19 +920,33 @@ pub async fn cancel_claude_execution(
     let registry = app.state::<crate::process::ProcessRegistryState>();
     match registry.0.get_claude_session_by_id(&session_id) {
         Ok(Some(process_info)) => {
-            log::info!("Found process in registry for session {}: run_id={}, PID={}", 
-                session_id, process_info.run_id, process_info.pid);
-            match crate::cli_manager::kill_cli_process(app.clone(), process_info.pid).await {
-                Ok(_) => {
-                    log::info!("Successfully killed process via cli_manager");
-                    // Emit cancellation events for UI consistency
-                    let _ = app.emit(&format!("claude-cancelled:{}", session_id), true);
-                    tokio::time::sleep(tokio::time::Duration::from_millis(100)).await;
-                    let _ = app.emit(&format!("claude-complete:{}", session_id), false);
+            log::info!(
+                "Found process in registry for session {}: run_id={}, PID={}",
+                session_id, process_info.run_id, process_info.pid
+            );
+
+            // Prefer using the ProcessRegistry kill to ensure proper cleanup/unregister
+            match registry.0.kill_process(process_info.run_id).await {
+                Ok(true) => {
+                    log::info!("Successfully killed process via ProcessRegistry");
+                    // Emit standard agent events expected by the UI
+                    let _ = app.emit(&format!("agent-cancelled:{}", session_id), true);
+                    // Optionally also emit a completion=false to ensure UI settles
+                    let _ = app.emit(&format!("agent-complete:{}", session_id), false);
                     Ok(())
                 }
+                Ok(false) => {
+                    log::warn!(
+                        "ProcessRegistry.kill_process reported not found for run_id {} (PID {})",
+                        process_info.run_id, process_info.pid
+                    );
+                    Err(format!(
+                        "No active process found for session {} (run_id {})",
+                        session_id, process_info.run_id
+                    ))
+                }
                 Err(e) => {
-                    log::error!("Failed to kill process via cli_manager: {}", e);
+                    log::error!("Failed to kill process via ProcessRegistry: {}", e);
                     Err(format!("Failed to cancel Claude execution: {}", e))
                 }
             }
