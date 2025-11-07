@@ -20,7 +20,7 @@ import { listen, type UnlistenFn } from "@tauri-apps/api/event";
 import { StreamMessage } from "./StreamMessage";
 
 
-import { FloatingPromptInput, type FloatingPromptInputRef } from "./FloatingPromptInput";
+import { FloatingPromptInput, type FloatingPromptInputRef, type PromptSelection, type PromptSendPayload } from "./FloatingPromptInput";
 import { ErrorBoundary } from "./ErrorBoundary";
 import { TimelineNavigator } from "./TimelineNavigator";
 import { CheckpointSettings } from "./CheckpointSettings";
@@ -33,6 +33,7 @@ import { WebviewPreview } from "./WebviewPreview";
 import { useVirtualizer } from "@tanstack/react-virtual";
 import { useTrackEvent, useComponentMetrics, useWorkflowTracking } from "@/hooks";
 import { SessionPersistenceService } from "@/services/sessionPersistence";
+import { CLI_CLIENTS, DEFAULT_CLI_PROVIDER, type CliProviderId } from "@/constants/cliClients";
 
 interface ClaudeCodeSessionProps {
   /**
@@ -88,8 +89,20 @@ export const ClaudeCodeSession: React.FC<ClaudeCodeSessionProps> = ({
   const [totalTokens, setTotalTokens] = useState(0);
   const [extractedSessionInfo] = useState<{ sessionId: string; projectId: string } | null>(null);
   const [currentAgentRunId, setCurrentAgentRunId] = useState<number | null>(agentRun?.id || null);
-  const [currentAgentModel] = useState<"sonnet" | "opus">((agentRun?.model as any) === "opus" ? "opus" : "sonnet");
-  const [currentAgentProvider] = useState<string>(agentRun?.provider || "claude");
+  const cliProviderIds = CLI_CLIENTS.map((client) => client.id);
+  const isCliProvider = (value: string | null | undefined): value is CliProviderId =>
+    value != null && (cliProviderIds as CliProviderId[]).includes(value as CliProviderId);
+  const initialProvider = isCliProvider(agentRun?.provider) ? (agentRun?.provider as CliProviderId) : DEFAULT_CLI_PROVIDER;
+  const fallbackModel =
+    typeof agentRun?.model === "string" && agentRun?.model
+      ? agentRun.model
+      : CLI_CLIENTS[0]?.models[0]?.id || "sonnet";
+  const [composerSelection, setComposerSelection] = useState<{ provider: CliProviderId; model: string }>({
+    provider: initialProvider,
+    model: fallbackModel,
+  });
+  const [primaryClient, setPrimaryClient] = useState<CliProviderId>(initialProvider);
+  const clientSelectionOverrideRef = useRef(false);
   const [showTimeline, setShowTimeline] = useState(false);
   const [timelineVersion, setTimelineVersion] = useState(0);
   const [showSettings, setShowSettings] = useState(false);
@@ -97,9 +110,13 @@ export const ClaudeCodeSession: React.FC<ClaudeCodeSessionProps> = ({
   const [showSlashCommandsSettings, setShowSlashCommandsSettings] = useState(false);
   const [forkCheckpointId, setForkCheckpointId] = useState<string | null>(null);
   const [forkSessionName, setForkSessionName] = useState("");
+  const activeClient =
+    CLI_CLIENTS.find((client) => client.id === composerSelection.provider) ?? CLI_CLIENTS[0];
   
   // Queued prompts state
-  const [queuedPrompts, setQueuedPrompts] = useState<Array<{ id: string; prompt: string; model: "sonnet" | "opus" }>>([]);
+  const [queuedPrompts, setQueuedPrompts] = useState<
+    Array<{ id: string; prompt: string; model: string; provider: CliProviderId }>
+  >([]);
   
   // New state for preview feature
   const [showPreview, setShowPreview] = useState(false);
@@ -115,7 +132,9 @@ export const ClaudeCodeSession: React.FC<ClaudeCodeSessionProps> = ({
   const unlistenRefs = useRef<UnlistenFn[]>([]);
   const hasActiveSessionRef = useRef(false);
   const floatingPromptRef = useRef<FloatingPromptInputRef>(null);
-  const queuedPromptsRef = useRef<Array<{ id: string; prompt: string; model: "sonnet" | "opus" }>>([]);
+  const queuedPromptsRef = useRef<
+    Array<{ id: string; prompt: string; model: string; provider: CliProviderId }>
+  >([]);
   const isMountedRef = useRef(true);
   const isListeningRef = useRef(false);
   const sessionStartTime = useRef<number>(Date.now());
@@ -155,6 +174,26 @@ export const ClaudeCodeSession: React.FC<ClaudeCodeSessionProps> = ({
   useEffect(() => {
     queuedPromptsRef.current = queuedPrompts;
   }, [queuedPrompts]);
+
+  useEffect(() => {
+    if (agentRun) return;
+    let mounted = true;
+    (async () => {
+      try {
+        const preferred = await api.getPrimaryCliProvider();
+        if (!mounted) return;
+        if (preferred && isCliProvider(preferred) && !clientSelectionOverrideRef.current) {
+          setPrimaryClient(preferred);
+          setComposerSelection((prev) => ({ ...prev, provider: preferred }));
+        }
+      } catch (err) {
+        console.error("Failed to load preferred CLI provider:", err);
+      }
+    })();
+    return () => {
+      mounted = false;
+    };
+  }, [agentRun]);
 
   // Get effective session info (from prop or extracted) - use useMemo to ensure it updates
   const effectiveSession = useMemo(() => {
@@ -437,8 +476,16 @@ export const ClaudeCodeSession: React.FC<ClaudeCodeSessionProps> = ({
 
   // Project path selection handled by parent tab controls
 
-  const handleSendPrompt = async (prompt: string) => {
-    console.log('[ClaudeCodeSession] handleSendPrompt called with:', { prompt, model: currentAgentModel, projectPath, currentAgentRunId, effectiveSession, provider: currentAgentProvider });
+  const handleSendPrompt = async (payload: PromptSendPayload) => {
+    const { prompt, model, provider } = payload;
+    console.log('[ClaudeCodeSession] handleSendPrompt called with:', {
+      prompt,
+      model,
+      provider,
+      projectPath,
+      currentAgentRunId,
+      effectiveSession,
+    });
     
     if (!projectPath) {
       setError("Please select a project directory first");
@@ -450,7 +497,8 @@ export const ClaudeCodeSession: React.FC<ClaudeCodeSessionProps> = ({
       const newPrompt = {
         id: `${Date.now()}-${Math.random().toString(36).substr(2, 9)}`,
         prompt,
-        model: currentAgentModel // Use current model for queued prompts
+        model,
+        provider,
       };
       setQueuedPrompts(prev => [...prev, newPrompt]);
       return;
@@ -513,14 +561,14 @@ export const ClaudeCodeSession: React.FC<ClaudeCodeSessionProps> = ({
       }
       
       // Track model changes
-      const lastModel = sessionMetrics.current.modelChanges.length > 0 
+      const lastModel = sessionMetrics.current.modelChanges.length > 0
         ? sessionMetrics.current.modelChanges[sessionMetrics.current.modelChanges.length - 1].to
-        : (sessionMetrics.current.wasResumed ? currentAgentModel : currentAgentModel); // Default to currentAgentModel
+        : composerSelection.model;
       
-      if (lastModel !== currentAgentModel) {
+      if (lastModel !== model) {
         sessionMetrics.current.modelChanges.push({
           from: lastModel,
-          to: currentAgentModel,
+          to: model,
           timestamp: Date.now()
         });
       }
@@ -534,7 +582,7 @@ export const ClaudeCodeSession: React.FC<ClaudeCodeSessionProps> = ({
       
       trackEvent.enhancedPromptSubmitted({
         prompt_length: prompt.length,
-        model: currentAgentModel,
+        model,
         has_attachments: false, // TODO: Add attachment support when implemented
         source: 'keyboard', // TODO: Track actual source (keyboard vs button)
         word_count: wordCount,
@@ -547,13 +595,12 @@ export const ClaudeCodeSession: React.FC<ClaudeCodeSessionProps> = ({
 
       // Execute the appropriate command
       // The executeAgent API call now handles starting/resuming based on runId and agentId
-      // We pass the currentAgentModel and currentAgentProvider
       await api.executeAgent(
         agentRun?.agent_id || 0, // Pass agent_id if available, otherwise 0 (will be handled by backend)
         projectPath,
         prompt,
-        currentAgentModel,
-        currentAgentProvider,
+        model,
+        provider,
       );
     } catch (err) {
       console.error("Failed to send prompt:", err);
@@ -685,15 +732,15 @@ export const ClaudeCodeSession: React.FC<ClaudeCodeSessionProps> = ({
         errors_encountered: metrics.errorsEncountered,
         
         // Session context
-        model: metrics.modelChanges.length > 0 
-          ? metrics.modelChanges[metrics.modelChanges.length - 1].to 
-          : currentAgentModel,
+        model: metrics.modelChanges.length > 0
+          ? metrics.modelChanges[metrics.modelChanges.length - 1].to
+          : composerSelection.model,
         has_checkpoints: metrics.checkpointCount > 0,
         checkpoint_count: metrics.checkpointCount,
         was_resumed: metrics.wasResumed,
         
         // Agent context (if applicable)
-        agent_type: currentAgentProvider, 
+        agent_type: composerSelection.provider,
         agent_name: agentRun?.agent_name, 
         agent_success: success,
         
@@ -714,7 +761,11 @@ export const ClaudeCodeSession: React.FC<ClaudeCodeSessionProps> = ({
       
       // Small delay to ensure UI updates
       setTimeout(() => {
-        handleSendPrompt(nextPrompt.prompt);
+        handleSendPrompt({
+          prompt: nextPrompt.prompt,
+          model: nextPrompt.model,
+          provider: nextPrompt.provider,
+        });
       }, 100);
     }
   };
@@ -811,6 +862,20 @@ export const ClaudeCodeSession: React.FC<ClaudeCodeSessionProps> = ({
     sessionMetrics.current.checkpointCount += 1;
   };
 
+  const handleComposerSelectionChange = (selection: PromptSelection) => {
+    clientSelectionOverrideRef.current = true;
+    setComposerSelection({
+      provider: selection.provider,
+      model: selection.model,
+    });
+  };
+
+  const getModelDisplayName = (provider: CliProviderId, modelId: string) => {
+    const client = CLI_CLIENTS.find((c) => c.id === provider);
+    const model = client?.models.find((m) => m.id === modelId);
+    return model?.name || modelId;
+  };
+
   const handleCancelExecution = async () => {
     if (!currentAgentRunId || !isLoading) return;
     
@@ -855,15 +920,15 @@ export const ClaudeCodeSession: React.FC<ClaudeCodeSessionProps> = ({
         errors_encountered: metrics.errorsEncountered,
         
         // Session context
-        model: metrics.modelChanges.length > 0 
-          ? metrics.modelChanges[metrics.modelChanges.length - 1].to 
-          : currentAgentModel,
+        model: metrics.modelChanges.length > 0
+          ? metrics.modelChanges[metrics.modelChanges.length - 1].to
+          : composerSelection.model,
         has_checkpoints: metrics.checkpointCount > 0,
         checkpoint_count: metrics.checkpointCount,
         was_resumed: metrics.wasResumed,
         
         // Agent context (if applicable)
-        agent_type: currentAgentProvider, 
+        agent_type: composerSelection.provider,
         agent_name: agentRun?.agent_name, 
         agent_success: undefined, // TODO: Pass from agent execution
         
@@ -1178,7 +1243,7 @@ export const ClaudeCodeSession: React.FC<ClaudeCodeSessionProps> = ({
                   <div className="flex items-center gap-3">
                     <div className="rotating-symbol text-primary" />
                     <span className="text-sm text-muted-foreground">
-                      {agentRun ? "Loading session history..." : `Initializing ${currentAgentProvider} agent...`}
+                      {agentRun ? "Loading session history..." : `Initializing ${activeClient.name} agent...`}
                     </span>
                   </div>
                 </div>
@@ -1227,7 +1292,7 @@ export const ClaudeCodeSession: React.FC<ClaudeCodeSessionProps> = ({
                         <div className="flex items-center gap-2 mb-1">
                           <span className="text-xs font-medium text-muted-foreground">#{index + 1}</span>
                           <span className="text-xs px-1.5 py-0.5 bg-primary/10 text-primary rounded">
-                            {queuedPrompt.model === "opus" ? "Opus" : "Sonnet"}
+                            {CLI_CLIENTS.find((c) => c.id === queuedPrompt.provider)?.shortName || queuedPrompt.provider} • {getModelDisplayName(queuedPrompt.provider, queuedPrompt.model)}
                           </span>
                         </div>
                         <p className="text-sm line-clamp-2 break-words">{queuedPrompt.prompt}</p>
@@ -1338,6 +1403,9 @@ export const ClaudeCodeSession: React.FC<ClaudeCodeSessionProps> = ({
             <FloatingPromptInput
               ref={floatingPromptRef}
               onSend={handleSendPrompt}
+              clients={CLI_CLIENTS}
+              defaultProvider={primaryClient}
+              onSelectionChange={handleComposerSelectionChange}
               onCancel={handleCancelExecution}
               isLoading={isLoading}
               disabled={!projectPath}

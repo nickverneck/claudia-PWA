@@ -8,6 +8,67 @@ import { api, type ClaudeInstallation } from "@/lib/api";
 import { cn } from "@/lib/utils";
 import { CheckCircle, HardDrive, Settings, Terminal, Info } from "lucide-react";
 
+type CliTool = "claude" | "codex" | "gemini" | "qwen";
+
+const TOOL_CONFIG: Record<CliTool, {
+  label: string;
+  helperText: string;
+  title: string;
+  description: string;
+  emptyState: string;
+  selectPlaceholder: string;
+  choosePlaceholder: string;
+  resourceName: string;
+}> = {
+  claude: {
+    label: "Claude Installation",
+    helperText: "Select which version of Claude to use",
+    title: "Claude Code Installation",
+    description: "Choose your preferred Claude Code installation.",
+    emptyState: "No Claude installations found",
+    selectPlaceholder: "Choose Claude installation",
+    choosePlaceholder: "Select Claude installation",
+    resourceName: "Claude installations",
+  },
+  codex: {
+    label: "Codex Installation",
+    helperText: "Select which OpenAI Codex CLI binary to use",
+    title: "OpenAI Codex CLI Installation",
+    description: "Choose your preferred OpenAI Codex CLI installation.",
+    emptyState: "No Codex installations found",
+    selectPlaceholder: "Choose Codex installation",
+    choosePlaceholder: "Select Codex installation",
+    resourceName: "Codex installations",
+  },
+  gemini: {
+    label: "Gemini Installation",
+    helperText: "Select which Gemini CLI binary to use",
+    title: "Gemini CLI Installation",
+    description: "Choose your preferred Gemini CLI installation.",
+    emptyState: "No Gemini installations found",
+    selectPlaceholder: "Choose Gemini installation",
+    choosePlaceholder: "Select Gemini installation",
+    resourceName: "Gemini installations",
+  },
+  qwen: {
+    label: "Qwen Installation",
+    helperText: "Select which Qwen3 Coder binary to use",
+    title: "Qwen3 Coder Installation",
+    description: "Choose your preferred Qwen3 Coder installation.",
+    emptyState: "No Qwen installations found",
+    selectPlaceholder: "Choose Qwen installation",
+    choosePlaceholder: "Select Qwen installation",
+    resourceName: "Qwen installations",
+  },
+};
+
+const INSTALLATION_LOADERS: Record<CliTool, () => Promise<ClaudeInstallation[]>> = {
+  claude: () => api.listClaudeInstallations(),
+  codex: () => api.listCodexInstallations(),
+  gemini: () => api.listGeminiInstallations(),
+  qwen: () => api.listQwenInstallations(),
+};
+
 interface ClaudeInstallationSelectorProps {
   /**
    * Currently selected installation path
@@ -37,14 +98,19 @@ interface ClaudeInstallationSelectorProps {
    * Simplified mode for cleaner UI
    */
   simplified?: boolean;
+  /**
+   * Which CLI tool to manage
+   */
+  tool?: CliTool;
 }
 
 /**
- * ClaudeInstallationSelector component for selecting Claude Code installations
- * Supports system installations and user preferences
- * 
+ * ClaudeInstallationSelector component for selecting CLI installations
+ * Supports system installations and user preferences for multiple tools
+ *
  * @example
  * <ClaudeVersionSelector
+ *   tool="codex"
  *   selectedPath={currentPath}
  *   onSelect={(installation) => setSelectedInstallation(installation)}
  * />
@@ -57,15 +123,18 @@ export const ClaudeInstallationSelector: React.FC<ClaudeInstallationSelectorProp
   onSave,
   isSaving = false,
   simplified = false,
+  tool = "claude",
 }) => {
   const [installations, setInstallations] = useState<ClaudeInstallation[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [selectedInstallation, setSelectedInstallation] = useState<ClaudeInstallation | null>(null);
+  const config = TOOL_CONFIG[tool];
+  const selectId = `${tool}-installation`;
 
   useEffect(() => {
     loadInstallations();
-  }, []);
+  }, [tool]);
 
   useEffect(() => {
     // Update selected installation when selectedPath changes
@@ -81,7 +150,8 @@ export const ClaudeInstallationSelector: React.FC<ClaudeInstallationSelectorProp
     try {
       setLoading(true);
       setError(null);
-      const foundInstallations = await api.listClaudeInstallations();
+      const loader = INSTALLATION_LOADERS[tool];
+      const foundInstallations = await loader();
       setInstallations(foundInstallations);
       
       // If we have a selected path, find and select it
@@ -96,8 +166,8 @@ export const ClaudeInstallationSelector: React.FC<ClaudeInstallationSelectorProp
         onSelect(foundInstallations[0]);
       }
     } catch (err) {
-      console.error("Failed to load Claude installations:", err);
-      setError(err instanceof Error ? err.message : "Failed to load Claude installations");
+      console.error(`Failed to load ${config.resourceName}:`, err);
+      setError(err instanceof Error ? err.message : `Failed to load ${config.resourceName}`);
     } finally {
       setLoading(false);
     }
@@ -137,7 +207,7 @@ export const ClaudeInstallationSelector: React.FC<ClaudeInstallationSelectorProp
     if (simplified) {
       return (
         <div className="space-y-2">
-          <Label className="text-sm font-medium">Claude Installation</Label>
+          <Label className="text-sm font-medium">{config.label}</Label>
           <div className="flex items-center justify-center py-3 border rounded-lg">
             <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-primary"></div>
           </div>
@@ -147,7 +217,7 @@ export const ClaudeInstallationSelector: React.FC<ClaudeInstallationSelectorProp
     return (
       <Card className={className}>
         <CardHeader>
-          <CardTitle>Claude Code Installation</CardTitle>
+          <CardTitle>{config.title}</CardTitle>
           <CardDescription>Loading available installations...</CardDescription>
         </CardHeader>
         <CardContent>
@@ -163,7 +233,7 @@ export const ClaudeInstallationSelector: React.FC<ClaudeInstallationSelectorProp
     if (simplified) {
       return (
         <div className="space-y-2">
-          <Label className="text-sm font-medium">Claude Installation</Label>
+          <Label className="text-sm font-medium">{config.label}</Label>
           <div className="p-3 border border-destructive/50 rounded-lg bg-destructive/10">
             <p className="text-sm text-destructive mb-2">{error}</p>
             <Button onClick={loadInstallations} variant="outline" size="sm">
@@ -176,7 +246,7 @@ export const ClaudeInstallationSelector: React.FC<ClaudeInstallationSelectorProp
     return (
       <Card className={className}>
         <CardHeader>
-          <CardTitle>Claude Code Installation</CardTitle>
+          <CardTitle>{config.title}</CardTitle>
           <CardDescription>Error loading installations</CardDescription>
         </CardHeader>
         <CardContent>
@@ -198,9 +268,9 @@ export const ClaudeInstallationSelector: React.FC<ClaudeInstallationSelectorProp
       <div className={cn("space-y-3", className)}>
         <div className="flex items-center justify-between">
           <div className="space-y-0.5">
-            <Label htmlFor="claude-installation" className="text-sm font-medium">Claude Installation</Label>
+            <Label htmlFor={selectId} className="text-sm font-medium">{config.label}</Label>
             <p className="text-xs text-muted-foreground">
-              Select which version of Claude to use
+              {config.helperText}
             </p>
           </div>
           {selectedInstallation && (
@@ -211,8 +281,8 @@ export const ClaudeInstallationSelector: React.FC<ClaudeInstallationSelectorProp
         </div>
         
         <Select value={selectedInstallation?.path || ""} onValueChange={handleInstallationChange}>
-          <SelectTrigger id="claude-installation" className="w-full">
-            <SelectValue placeholder="Choose Claude installation">
+          <SelectTrigger id={selectId} className="w-full">
+            <SelectValue placeholder={config.selectPlaceholder}>
               {selectedInstallation && (
                 <div className="flex items-center gap-2">
                   <Terminal className="h-3.5 w-3.5 text-muted-foreground" />
@@ -227,7 +297,7 @@ export const ClaudeInstallationSelector: React.FC<ClaudeInstallationSelectorProp
           <SelectContent side="bottom" align="start" sideOffset={5}>
             {installations.length === 0 ? (
               <div className="p-4 text-center text-sm text-muted-foreground">
-                No Claude installations found
+                {config.emptyState}
               </div>
             ) : (
               <>
@@ -272,10 +342,10 @@ export const ClaudeInstallationSelector: React.FC<ClaudeInstallationSelectorProp
       <CardHeader>
         <CardTitle className="flex items-center gap-2">
           <CheckCircle className="h-5 w-5" />
-          Claude Code Installation
+          {config.title}
         </CardTitle>
         <CardDescription>
-          Choose your preferred Claude Code installation.
+          {config.description}
         </CardDescription>
       </CardHeader>
       <CardContent className="space-y-6">
@@ -284,7 +354,7 @@ export const ClaudeInstallationSelector: React.FC<ClaudeInstallationSelectorProp
           <Label className="text-sm font-medium">Available Installations</Label>
           <Select value={selectedInstallation?.path || ""} onValueChange={handleInstallationChange}>
             <SelectTrigger>
-              <SelectValue placeholder="Select Claude installation">
+              <SelectValue placeholder={config.choosePlaceholder}>
                 {selectedInstallation && (
                   <div className="flex items-center gap-2">
                     {getInstallationIcon(selectedInstallation)}

@@ -54,6 +54,39 @@ interface EnvironmentVariable {
   value: string;
 }
 
+const CLI_TOOLS = ["claude", "codex", "gemini", "qwen"] as const;
+type CliTool = typeof CLI_TOOLS[number];
+const isCliTool = (value: string): value is CliTool =>
+  (CLI_TOOLS as readonly string[]).includes(value);
+
+const CLI_TOOL_NAMES: Record<CliTool, string> = {
+  claude: "Claude Code",
+  codex: "OpenAI Codex CLI",
+  gemini: "Gemini CLI",
+  qwen: "Qwen3 Coder",
+};
+
+const createBinaryPathState = (): Record<CliTool, string | null> => ({
+  claude: null,
+  codex: null,
+  gemini: null,
+  qwen: null,
+});
+
+const createBinaryChangedState = (): Record<CliTool, boolean> => ({
+  claude: false,
+  codex: false,
+  gemini: false,
+  qwen: false,
+});
+
+const createInstallationState = (): Record<CliTool, ClaudeInstallation | null> => ({
+  claude: null,
+  codex: null,
+  gemini: null,
+  qwen: null,
+});
+
 /**
  * Comprehensive Settings UI for managing Claude Code settings
  * Provides a no-code interface for editing the settings.json file
@@ -66,10 +99,13 @@ export const Settings: React.FC<SettingsProps> = ({
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [activeTab, setActiveTab] = useState("general");
-  const [currentBinaryPath, setCurrentBinaryPath] = useState<string | null>(null);
-  const [selectedInstallation, setSelectedInstallation] = useState<ClaudeInstallation | null>(null);
-  const [binaryPathChanged, setBinaryPathChanged] = useState(false);
+  const [currentBinaryPaths, setCurrentBinaryPaths] = useState<Record<CliTool, string | null>>(() => createBinaryPathState());
+  const [selectedInstallations, setSelectedInstallations] = useState<Record<CliTool, ClaudeInstallation | null>>(() => createInstallationState());
+  const [binaryPathChanged, setBinaryPathChanged] = useState<Record<CliTool, boolean>>(() => createBinaryChangedState());
   const [toast, setToast] = useState<{ message: string; type: 'success' | 'error' } | null>(null);
+  const [cliPathsLoaded, setCliPathsLoaded] = useState(false);
+  const [primaryCli, setPrimaryCli] = useState<CliTool>("claude");
+  const [primaryCliChanged, setPrimaryCliChanged] = useState(false);
   
   // Permission rules state
   const [allowRules, setAllowRules] = useState<PermissionRule[]>([]);
@@ -101,7 +137,8 @@ export const Settings: React.FC<SettingsProps> = ({
   // Load settings on mount
   useEffect(() => {
     loadSettings();
-    loadClaudeBinaryPath();
+    loadCliBinaryPaths();
+    loadPrimaryCliPreference();
     loadAnalyticsSettings();
     // Load tab persistence setting
     setTabPersistenceEnabled(TabPersistenceService.isEnabled());
@@ -119,15 +156,42 @@ export const Settings: React.FC<SettingsProps> = ({
   };
 
   /**
-   * Loads the current Claude binary path
+   * Loads the current CLI binary paths
    */
-  const loadClaudeBinaryPath = async () => {
+  const loadCliBinaryPaths = async () => {
     try {
-      const path = await api.getClaudeBinaryPath();
-      setCurrentBinaryPath(path);
+      setCliPathsLoaded(false);
+      const [claudePath, codexPath, geminiPath, qwenPath] = await Promise.all([
+        api.getClaudeBinaryPath(),
+        api.getCodexBinaryPath(),
+        api.getGeminiBinaryPath(),
+        api.getQwenBinaryPath(),
+      ]);
+      setCurrentBinaryPaths({
+        claude: claudePath,
+        codex: codexPath,
+        gemini: geminiPath,
+        qwen: qwenPath,
+      });
     } catch (err) {
-      console.error("Failed to load Claude binary path:", err);
+      console.error("Failed to load CLI binary paths:", err);
+    } finally {
+      setCliPathsLoaded(true);
     }
+  };
+
+  /**
+   * Loads the preferred CLI provider
+   */
+  const loadPrimaryCliPreference = async () => {
+    try {
+      const provider = await api.getPrimaryCliProvider();
+      if (provider && isCliTool(provider)) {
+        setPrimaryCli(provider);
+      }
+    } catch (err) {
+      console.error("Failed to load primary CLI provider:", err);
+    } 
   };
 
   /**
@@ -214,11 +278,37 @@ export const Settings: React.FC<SettingsProps> = ({
       await api.saveClaudeSettings(updatedSettings);
       setSettings(updatedSettings);
 
-      // Save Claude binary path if changed
-      if (binaryPathChanged && selectedInstallation) {
-        await api.setClaudeBinaryPath(selectedInstallation.path);
-        setCurrentBinaryPath(selectedInstallation.path);
-        setBinaryPathChanged(false);
+      // Save CLI binary paths if changed
+      const setBinaryPathByTool: Record<CliTool, (path: string) => Promise<void>> = {
+        claude: api.setClaudeBinaryPath,
+        codex: api.setCodexBinaryPath,
+        gemini: api.setGeminiBinaryPath,
+        qwen: api.setQwenBinaryPath,
+      };
+      const updatedPaths: Partial<Record<CliTool, string | null>> = {};
+
+      for (const tool of CLI_TOOLS) {
+        if (binaryPathChanged[tool] && selectedInstallations[tool]) {
+          const selected = selectedInstallations[tool]!;
+          await setBinaryPathByTool[tool](selected.path);
+          updatedPaths[tool] = selected.path;
+        }
+      }
+
+      if (Object.keys(updatedPaths).length > 0) {
+        setCurrentBinaryPaths(prev => ({ ...prev, ...updatedPaths }));
+        setBinaryPathChanged(prev => {
+          const next = { ...prev };
+          (Object.keys(updatedPaths) as CliTool[]).forEach(tool => {
+            next[tool] = false;
+          });
+          return next;
+        });
+      }
+
+      if (primaryCliChanged) {
+        await api.setPrimaryCliProvider(primaryCli);
+        setPrimaryCliChanged(false);
       }
 
       // Save user hooks if changed
@@ -322,11 +412,22 @@ export const Settings: React.FC<SettingsProps> = ({
   };
 
   /**
-   * Handle Claude installation selection
+   * Handle CLI installation selection
    */
-  const handleClaudeInstallationSelect = (installation: ClaudeInstallation) => {
-    setSelectedInstallation(installation);
-    setBinaryPathChanged(installation.path !== currentBinaryPath);
+  const handleCliInstallationSelect = (tool: CliTool, installation: ClaudeInstallation) => {
+    if (!cliPathsLoaded) {
+      return;
+    }
+    setSelectedInstallations(prev => ({ ...prev, [tool]: installation }));
+    setBinaryPathChanged(prev => ({ ...prev, [tool]: installation.path !== currentBinaryPaths[tool] }));
+  };
+
+  /**
+   * Handle selecting the primary CLI provider
+   */
+  const handlePrimaryCliSelect = (tool: CliTool) => {
+    setPrimaryCli(tool);
+    setPrimaryCliChanged(true);
   };
 
   return (
@@ -338,7 +439,7 @@ export const Settings: React.FC<SettingsProps> = ({
             <div>
               <h1 className="text-heading-1">Settings</h1>
               <p className="mt-1 text-body-small text-muted-foreground">
-                Configure Claude Code preferences
+                Configure your CLI client preferences
               </p>
             </div>
             <motion.div
@@ -649,19 +750,62 @@ export const Settings: React.FC<SettingsProps> = ({
                       </div>
                     </div>
                     
-                    {/* Claude Binary Path Selector */}
-                    <div className="space-y-3">
-                      <ClaudeVersionSelector
-                        selectedPath={currentBinaryPath}
-                        onSelect={handleClaudeInstallationSelect}
-                        simplified={true}
-                      />
-                      {binaryPathChanged && (
-                        <p className="text-caption text-amber-600 dark:text-amber-400 flex items-center gap-1">
-                          <AlertCircle className="h-3 w-3" />
-                          Changes will be applied when you save settings.
+                    {/* CLI Binary Path Selectors */}
+                    <div className="space-y-4">
+                      <div>
+                        <Label className="text-sm font-medium">CLI Installations</Label>
+                        <p className="text-caption text-muted-foreground">
+                          Choose which binary each provider should use.
                         </p>
-                      )}
+                      </div>
+                      <div className="space-y-5">
+                        {CLI_TOOLS.map((tool) => {
+                          const isPrimary = primaryCli === tool;
+                          return (
+                            <div key={tool} className="space-y-2">
+                              <div className="flex items-center justify-between">
+                                <p className="text-xs font-medium text-muted-foreground">
+                                  {CLI_TOOL_NAMES[tool]}
+                                </p>
+                                <button
+                                  type="button"
+                                  onClick={() => handlePrimaryCliSelect(tool)}
+                                  className={cn(
+                                    "flex items-center gap-2 rounded-md border px-2 py-1 text-xs font-medium transition-colors",
+                                    isPrimary
+                                      ? "border-primary bg-primary/10 text-primary"
+                                      : "border-border text-muted-foreground hover:border-primary/50 hover:text-foreground"
+                                  )}
+                                >
+                                  <span
+                                    className={cn(
+                                      "flex h-4 w-4 items-center justify-center rounded-sm border",
+                                      isPrimary
+                                        ? "border-primary bg-primary text-primary-foreground"
+                                        : "border-border bg-background"
+                                    )}
+                                  >
+                                    {isPrimary && <Check className="h-3 w-3" />}
+                                  </span>
+                                  Main client
+                                </button>
+                              </div>
+                              <ClaudeVersionSelector
+                                tool={tool}
+                                selectedPath={currentBinaryPaths[tool]}
+                                onSelect={(installation) => handleCliInstallationSelect(tool, installation)}
+                                simplified
+                              />
+                              {binaryPathChanged[tool] && (
+                                <p className="text-caption text-amber-600 dark:text-amber-400 flex items-center gap-1">
+                                  <AlertCircle className="h-3 w-3" />
+                                  {CLI_TOOL_NAMES[tool]} path changes will be applied when you save settings.
+                                </p>
+                              )}
+                            </div>
+                          );
+                        })}
+                      </div>
                     </div>
 
                     {/* Separator */}

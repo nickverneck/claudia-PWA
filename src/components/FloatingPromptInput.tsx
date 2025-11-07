@@ -1,4 +1,4 @@
-import React, { useState, useRef, useEffect } from "react";
+import React, { useState, useRef, useEffect, useMemo } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import {
   Send,
@@ -6,7 +6,6 @@ import {
   Minimize2,
   ChevronUp,
   Sparkles,
-  Zap,
   Square,
   Brain,
   Lightbulb,
@@ -24,12 +23,13 @@ import { SlashCommandPicker } from "./SlashCommandPicker";
 import { ImagePreview } from "./ImagePreview";
 import { type FileEntry, type SlashCommand } from "@/lib/api";
 import { getCurrentWebviewWindow } from "@tauri-apps/api/webviewWindow";
+import { CLI_CLIENTS, type CliProviderId, type CliClientOption } from "@/constants/cliClients";
 
 interface FloatingPromptInputProps {
   /**
    * Callback when prompt is sent
    */
-  onSend: (prompt: string, model: "sonnet" | "opus") => void;
+  onSend: (payload: PromptSendPayload) => void;
   /**
    * Whether the input is loading
    */
@@ -38,10 +38,6 @@ interface FloatingPromptInputProps {
    * Whether the input is disabled
    */
   disabled?: boolean;
-  /**
-   * Default model to select
-   */
-  defaultModel?: "sonnet" | "opus";
   /**
    * Project path for file picker
    */
@@ -58,10 +54,32 @@ interface FloatingPromptInputProps {
    * Extra menu items to display in the prompt bar
    */
   extraMenuItems?: React.ReactNode;
+  /**
+   * Available CLI clients (defaults to CLI_CLIENTS)
+   */
+  clients?: CliClientOption[];
+  /**
+   * Preferred client to preselect
+   */
+  defaultProvider?: CliProviderId;
+  /**
+   * Notifies parent components when the selection changes
+   */
+  onSelectionChange?: (selection: PromptSelection) => void;
 }
 
 export interface FloatingPromptInputRef {
   addImage: (imagePath: string) => void;
+}
+
+export interface PromptSelection {
+  provider: CliProviderId;
+  model: string;
+  thinkingMode?: ThinkingMode;
+}
+
+export interface PromptSendPayload extends PromptSelection {
+  prompt: string;
 }
 
 /**
@@ -160,34 +178,6 @@ const ThinkingModeIndicator: React.FC<{ level: number; color?: string }> = ({ le
   );
 };
 
-type Model = {
-  id: "sonnet" | "opus";
-  name: string;
-  description: string;
-  icon: React.ReactNode;
-  shortName: string;
-  color: string;
-};
-
-const MODELS: Model[] = [
-  {
-    id: "sonnet",
-    name: "Claude 4 Sonnet",
-    description: "Faster, efficient for most tasks",
-    icon: <Zap className="h-3.5 w-3.5" />,
-    shortName: "S",
-    color: "text-primary"
-  },
-  {
-    id: "opus",
-    name: "Claude 4 Opus",
-    description: "More capable, better for complex tasks",
-    icon: <Zap className="h-3.5 w-3.5" />,
-    shortName: "O",
-    color: "text-primary"
-  }
-];
-
 /**
  * FloatingPromptInput component - Fixed position prompt input with model picker
  * 
@@ -204,19 +194,44 @@ const FloatingPromptInputInner = (
     onSend,
     isLoading = false,
     disabled = false,
-    defaultModel = "sonnet",
     projectPath,
     className,
     onCancel,
     extraMenuItems,
+    clients = CLI_CLIENTS,
+    defaultProvider,
+    onSelectionChange,
   }: FloatingPromptInputProps,
   ref: React.Ref<FloatingPromptInputRef>,
 ) => {
+  const clientOptions = clients.length > 0 ? clients : CLI_CLIENTS;
+  const clientMap = useMemo(() => {
+    return clientOptions.reduce<Record<CliProviderId, CliClientOption>>((acc, client) => {
+      acc[client.id] = client;
+      return acc;
+    }, {} as Record<CliProviderId, CliClientOption>);
+  }, [clientOptions]);
+
+  const resolvedInitialProvider = useMemo<CliProviderId>(() => {
+    if (defaultProvider && clientMap[defaultProvider]) {
+      return defaultProvider;
+    }
+    return clientOptions[0]?.id ?? CLI_CLIENTS[0].id;
+  }, [clientMap, defaultProvider, clientOptions]);
+
   const [prompt, setPrompt] = useState("");
-  const [selectedModel, setSelectedModel] = useState<"sonnet" | "opus">(defaultModel);
+  const [selectedClient, setSelectedClient] = useState<CliProviderId>(resolvedInitialProvider);
+  const [modelSelections, setModelSelections] = useState<Record<string, string>>(() => {
+    const map: Record<string, string> = {};
+    clientOptions.forEach((client) => {
+      map[client.id] = client.models[0]?.id || "";
+    });
+    return map;
+  });
   const [selectedThinkingMode, setSelectedThinkingMode] = useState<ThinkingMode>("auto");
   const [isExpanded, setIsExpanded] = useState(false);
   const [modelPickerOpen, setModelPickerOpen] = useState(false);
+  const [clientPickerOpen, setClientPickerOpen] = useState(false);
   const [thinkingModePickerOpen, setThinkingModePickerOpen] = useState(false);
   const [showFilePicker, setShowFilePicker] = useState(false);
   const [filePickerQuery, setFilePickerQuery] = useState("");
@@ -225,11 +240,74 @@ const FloatingPromptInputInner = (
   const [cursorPosition, setCursorPosition] = useState(0);
   const [embeddedImages, setEmbeddedImages] = useState<string[]>([]);
   const [dragActive, setDragActive] = useState(false);
+  const clientOverrideRef = useRef(false);
 
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const expandedTextareaRef = useRef<HTMLTextAreaElement>(null);
   const unlistenDragDropRef = useRef<(() => void) | null>(null);
   const [textareaHeight, setTextareaHeight] = useState<number>(48);
+
+  const currentClient = clientMap[selectedClient] ?? clientOptions[0] ?? CLI_CLIENTS[0];
+  const selectedModelId =
+    modelSelections[selectedClient] || currentClient?.models[0]?.id || "";
+  const currentModelData =
+    currentClient?.models.find((m) => m.id === selectedModelId) ||
+    currentClient?.models[0];
+  const currentPlaceholder =
+    currentClient?.placeholder ||
+    "Message your AI assistant (@ for files, / for commands)...";
+
+  useEffect(() => {
+    if (!modelSelections[selectedClient] && currentClient?.models[0]) {
+      setModelSelections((prev) => ({
+        ...prev,
+        [selectedClient]: currentClient.models[0]!.id,
+      }));
+    }
+  }, [currentClient, modelSelections, selectedClient]);
+
+  useEffect(() => {
+    if (!currentClient || !selectedModelId) return;
+    onSelectionChange?.({
+      provider: selectedClient,
+      model: selectedModelId,
+      thinkingMode: currentClient.supportsThinking ? selectedThinkingMode : undefined,
+    });
+  }, [
+    currentClient,
+    onSelectionChange,
+    selectedClient,
+    selectedModelId,
+    selectedThinkingMode,
+  ]);
+
+  useEffect(() => {
+    if (
+      defaultProvider &&
+      clientMap[defaultProvider] &&
+      !clientOverrideRef.current
+    ) {
+      setSelectedClient(defaultProvider);
+    }
+  }, [defaultProvider, clientMap]);
+
+  useEffect(() => {
+    if (!clientMap[selectedClient] && clientOptions[0]) {
+      setSelectedClient(clientOptions[0].id);
+    }
+  }, [clientMap, clientOptions, selectedClient]);
+
+  useEffect(() => {
+    setModelSelections((prev) => {
+      const next = { ...prev };
+      clientOptions.forEach((client) => {
+        if (!next[client.id]) {
+          next[client.id] = client.models[0]?.id || "";
+        }
+      });
+      return next;
+    });
+  }, [clientOptions]);
 
   // Expose a method to add images programmatically
   React.useImperativeHandle(
@@ -259,6 +337,29 @@ const FloatingPromptInputInner = (
     }),
     [isExpanded]
   );
+
+  const handleClientChange = (clientId: CliProviderId) => {
+    if (!clientMap[clientId]) return;
+    clientOverrideRef.current = true;
+    setSelectedClient(clientId);
+    setModelSelections((prev) => {
+      if (prev[clientId]) {
+        return prev;
+      }
+      return {
+        ...prev,
+        [clientId]: clientMap[clientId].models[0]?.id || "",
+      };
+    });
+    setClientPickerOpen(false);
+  };
+
+  const handleModelChange = (modelId: string) => {
+    setModelSelections((prev) => ({
+      ...prev,
+      [selectedClient]: modelId,
+    }));
+  };
 
   // Helper function to check if a file is an image
   const isImageFile = (path: string): boolean => {
@@ -433,20 +534,27 @@ const FloatingPromptInputInner = (
   }, [isExpanded]);
 
   const handleSend = () => {
-    if (prompt.trim() && !disabled) {
-      let finalPrompt = prompt.trim();
-      
-      // Append thinking phrase if not auto mode
-      const thinkingMode = THINKING_MODES.find(m => m.id === selectedThinkingMode);
-      if (thinkingMode && thinkingMode.phrase) {
-        finalPrompt = `${finalPrompt}.\n\n${thinkingMode.phrase}.`;
-      }
-      
-      onSend(finalPrompt, selectedModel);
-      setPrompt("");
-      setEmbeddedImages([]);
-      setTextareaHeight(48); // Reset height after sending
+    if (!selectedModelId || !prompt.trim() || disabled) {
+      return;
     }
+
+    let finalPrompt = prompt.trim();
+    const thinkingMode = THINKING_MODES.find((m) => m.id === selectedThinkingMode);
+    if (currentClient?.supportsThinking && thinkingMode?.phrase) {
+      finalPrompt = `${finalPrompt}.\n\n${thinkingMode.phrase}.`;
+    }
+
+    const payload: PromptSendPayload = {
+      prompt: finalPrompt,
+      provider: selectedClient,
+      model: selectedModelId,
+      thinkingMode: currentClient?.supportsThinking ? selectedThinkingMode : undefined,
+    };
+
+    onSend(payload);
+    setPrompt("");
+    setEmbeddedImages([]);
+    setTextareaHeight(48);
   };
 
   const handleTextChange = (e: React.ChangeEvent<HTMLTextAreaElement>) => {
@@ -779,13 +887,11 @@ const FloatingPromptInputInner = (
     setPrompt(newPrompt.trim());
   };
 
-  const selectedModelData = MODELS.find(m => m.id === selectedModel) || MODELS[0];
-
   return (
     <TooltipProvider>
-    <>
-      {/* Expanded Modal */}
-      <AnimatePresence>
+      <div className="w-full">
+        {/* Expanded Modal */}
+        <AnimatePresence>
         {isExpanded && (
           <motion.div
             initial={{ opacity: 0 }}
@@ -835,7 +941,7 @@ const FloatingPromptInputInner = (
                 value={prompt}
                 onChange={handleTextChange}
                 onPaste={handlePaste}
-                placeholder="Type your message..."
+                placeholder={currentPlaceholder}
                 className="min-h-[200px] resize-none"
                 disabled={disabled}
                 onDragEnter={handleDrag}
@@ -847,67 +953,117 @@ const FloatingPromptInputInner = (
               <div className="flex items-center justify-between">
                 <div className="flex items-center gap-4">
                   <div className="flex items-center gap-2">
-                    <span className="text-xs text-muted-foreground">Model:</span>
+                    <span className="text-xs text-muted-foreground">Client:</span>
                     <Popover
                       trigger={
                         <Button
                           variant="outline"
                           size="sm"
-                          onClick={() => setModelPickerOpen(!modelPickerOpen)}
+                          disabled={disabled}
+                          onClick={() => setClientPickerOpen(!clientPickerOpen)}
                           className="gap-2"
                         >
-                          <span className={selectedModelData.color}>
-                            {selectedModelData.icon}
-                          </span>
-                          {selectedModelData.name}
+                          <span className="text-primary">{currentClient.icon}</span>
+                          {currentClient.shortName}
                         </Button>
                       }
                       content={
                         <div className="w-[300px] p-1">
-                          {MODELS.map((model) => (
+                          {clientOptions.map((client) => (
                             <button
-                              key={model.id}
-                              onClick={() => {
-                                setSelectedModel(model.id);
-                                setModelPickerOpen(false);
-                              }}
+                              key={client.id}
+                              onClick={() => handleClientChange(client.id)}
                               className={cn(
                                 "w-full flex items-start gap-3 p-3 rounded-md transition-colors text-left",
                                 "hover:bg-accent",
-                                selectedModel === model.id && "bg-accent"
+                                selectedClient === client.id && "bg-accent"
                               )}
                             >
-                              <div className="mt-0.5">
-                                <span className={model.color}>
-                                  {model.icon}
-                                </span>
+                              <div className="mt-0.5 text-primary">
+                                {client.icon}
                               </div>
                               <div className="flex-1 space-y-1">
-                                <div className="font-medium text-sm">{model.name}</div>
+                                <div className="font-medium text-sm">{client.name}</div>
                                 <div className="text-xs text-muted-foreground">
-                                  {model.description}
+                                  {client.description}
                                 </div>
                               </div>
                             </button>
                           ))}
                         </div>
                       }
-                      open={modelPickerOpen}
-                      onOpenChange={setModelPickerOpen}
+                      open={clientPickerOpen}
+                      onOpenChange={setClientPickerOpen}
                       align="start"
                       side="top"
                     />
                   </div>
 
-                  <div className="flex items-center gap-2">
-                    <span className="text-xs text-muted-foreground">Thinking:</span>
-                    <Popover
-                      trigger={
-                        <Tooltip>
-                          <TooltipTrigger asChild>
-                            <Button
-                              variant="outline"
+                  {currentClient.models.length > 0 && currentModelData && (
+                    <div className="flex items-center gap-2">
+                      <span className="text-xs text-muted-foreground">Model:</span>
+                      <Popover
+                        trigger={
+                          <Button
+                            variant="outline"
+                            size="sm"
+                            disabled={disabled}
+                            onClick={() => setModelPickerOpen(!modelPickerOpen)}
+                            className="gap-2"
+                          >
+                            <span className="text-primary">
+                              {currentModelData.icon}
+                            </span>
+                            {currentModelData.name}
+                          </Button>
+                        }
+                        content={
+                          <div className="w-[300px] p-1">
+                            {currentClient.models.map((model) => (
+                              <button
+                                key={model.id}
+                                onClick={() => {
+                                  handleModelChange(model.id);
+                                  setModelPickerOpen(false);
+                                }}
+                                className={cn(
+                                  "w-full flex items-start gap-3 p-3 rounded-md transition-colors text-left",
+                                  "hover:bg-accent",
+                                  selectedModelId === model.id && "bg-accent"
+                                )}
+                              >
+                                <div className="mt-0.5 text-primary">
+                                  {model.icon}
+                                </div>
+                                <div className="flex-1 space-y-1">
+                                  <div className="font-medium text-sm">{model.name}</div>
+                                  <div className="text-xs text-muted-foreground">
+                                    {model.description}
+                                  </div>
+                                </div>
+                              </button>
+                            ))}
+                          </div>
+                        }
+                        open={modelPickerOpen}
+                        onOpenChange={setModelPickerOpen}
+                        align="start"
+                        side="top"
+                      />
+                    </div>
+                  )}
+
+                  {currentClient.supportsThinking && (
+                    <div className="flex items-center gap-2">
+                      <span className="text-xs text-muted-foreground">Thinking:</span>
+                      <Popover
+                        trigger={
+                          <Tooltip>
+                            <TooltipTrigger asChild>
+                              <Button
+                                variant="outline"
                                 size="sm"
+                                disabled={disabled}
                                 onClick={() => setThinkingModePickerOpen(!thinkingModePickerOpen)}
                                 className="gap-2"
                               >
@@ -924,44 +1080,45 @@ const FloatingPromptInputInner = (
                               <p className="text-xs text-muted-foreground">{THINKING_MODES.find(m => m.id === selectedThinkingMode)?.description}</p>
                             </TooltipContent>
                           </Tooltip>
-                      }
-                      content={
-                        <div className="w-[280px] p-1">
-                          {THINKING_MODES.map((mode) => (
-                            <button
-                              key={mode.id}
-                              onClick={() => {
-                                setSelectedThinkingMode(mode.id);
-                                setThinkingModePickerOpen(false);
-                              }}
-                              className={cn(
-                                "w-full flex items-start gap-3 p-3 rounded-md transition-colors text-left",
-                                "hover:bg-accent",
-                                selectedThinkingMode === mode.id && "bg-accent"
-                              )}
-                            >
-                              <span className={cn("mt-0.5", mode.color)}>
-                                {mode.icon}
-                              </span>
-                              <div className="flex-1 space-y-1">
-                                <div className="font-medium text-sm">
-                                  {mode.name}
+                        }
+                        content={
+                          <div className="w-[280px] p-1">
+                            {THINKING_MODES.map((mode) => (
+                              <button
+                                key={mode.id}
+                                onClick={() => {
+                                  setSelectedThinkingMode(mode.id);
+                                  setThinkingModePickerOpen(false);
+                                }}
+                                className={cn(
+                                  "w-full flex items-start gap-3 p-3 rounded-md transition-colors text-left",
+                                  "hover:bg-accent",
+                                  selectedThinkingMode === mode.id && "bg-accent"
+                                )}
+                              >
+                                <span className={cn("mt-0.5", mode.color)}>
+                                  {mode.icon}
+                                </span>
+                                <div className="flex-1 space-y-1">
+                                  <div className="font-medium text-sm">
+                                    {mode.name}
+                                  </div>
+                                  <div className="text-xs text-muted-foreground">
+                                    {mode.description}
+                                  </div>
                                 </div>
-                                <div className="text-xs text-muted-foreground">
-                                  {mode.description}
-                                </div>
-                              </div>
-                              <ThinkingModeIndicator level={mode.level} />
-                            </button>
-                          ))}
-                        </div>
-                      }
-                      open={thinkingModePickerOpen}
-                      onOpenChange={setThinkingModePickerOpen}
-                      align="start"
-                      side="top"
-                    />
-                  </div>
+                                <ThinkingModeIndicator level={mode.level} />
+                              </button>
+                            ))}
+                          </div>
+                        }
+                        open={thinkingModePickerOpen}
+                        onOpenChange={setThinkingModePickerOpen}
+                        align="start"
+                        side="top"
+                      />
+                    </div>
+                  )}
                 </div>
 
                 <TooltipSimple content="Send message" side="top">
@@ -971,7 +1128,7 @@ const FloatingPromptInputInner = (
                   >
                     <Button
                       onClick={handleSend}
-                      disabled={!prompt.trim() || disabled}
+                      disabled={!prompt.trim() || disabled || !selectedModelId}
                       size="default"
                       className="min-w-[60px]"
                     >
@@ -1012,8 +1169,7 @@ const FloatingPromptInputInner = (
           )}
 
           <div className="p-3">
-            <div className="flex items-end gap-2">
-              {/* Model & Thinking Mode Selectors - Left side, fixed at bottom */}
+              {/* Client, Model & Thinking Selectors - Left side, fixed at bottom */}
               <div className="flex items-center gap-1 shrink-0 mb-1">
                 <Popover
                   trigger={
@@ -1021,6 +1177,61 @@ const FloatingPromptInputInner = (
                       <TooltipTrigger asChild>
                         <motion.div
                           whileTap={{ scale: 0.97 }}
+                          transition={{ duration: 0.15 }}
+                        >
+                          <Button
+                            variant="ghost"
+                            size="sm"
+                            disabled={disabled}
+                            className="h-9 px-2 hover:bg-accent/50 gap-1"
+                            onClick={() => setClientPickerOpen(!clientPickerOpen)}
+                          >
+                            <span className="text-primary">{currentClient.icon}</span>
+                            <span className="text-[10px] font-bold opacity-70">{currentClient.shortName}</span>
+                            <ChevronUp className="h-3 w-3 ml-0.5 opacity-50" />
+                          </Button>
+                        </motion.div>
+                      </TooltipTrigger>
+                      <TooltipContent side="top">
+                        <p className="text-xs font-medium">{currentClient.name}</p>
+                        <p className="text-xs text-muted-foreground">{currentClient.description}</p>
+                      </TooltipContent>
+                    </Tooltip>
+                  }
+                  content={
+                    <div className="w-[280px] p-1">
+                      {clientOptions.map((client) => (
+                        <button
+                          key={client.id}
+                          onClick={() => handleClientChange(client.id)}
+                          className={cn(
+                            "w-full flex items-start gap-3 p-3 rounded-md transition-colors text-left",
+                            "hover:bg-accent",
+                            selectedClient === client.id && "bg-accent"
+                          )}
+                        >
+                          <div className="mt-0.5 text-primary">{client.icon}</div>
+                          <div className="flex-1 space-y-1">
+                            <div className="font-medium text-sm">{client.name}</div>
+                            <div className="text-xs text-muted-foreground">{client.description}</div>
+                          </div>
+                        </button>
+                      ))}
+                    </div>
+                  }
+                  open={clientPickerOpen}
+                  onOpenChange={setClientPickerOpen}
+                  align="start"
+                  side="top"
+                />
+
+                {currentClient.models.length > 0 && currentModelData && (
+                  <Popover
+                    trigger={
+                      <Tooltip>
+                        <TooltipTrigger asChild>
+                          <motion.div
+                            whileTap={{ scale: 0.97 }}
                             transition={{ duration: 0.15 }}
                           >
                             <Button
@@ -1028,65 +1239,58 @@ const FloatingPromptInputInner = (
                               size="sm"
                               disabled={disabled}
                               className="h-9 px-2 hover:bg-accent/50 gap-1"
+                              onClick={() => setModelPickerOpen(!modelPickerOpen)}
                             >
-                              <span className={selectedModelData.color}>
-                                {selectedModelData.icon}
-                              </span>
-                              <span className="text-[10px] font-bold opacity-70">
-                                {selectedModelData.shortName}
-                              </span>
+                              <span className="text-primary">{currentModelData.icon}</span>
+                              <span className="text-[10px] font-bold opacity-70">{currentModelData.shortName}</span>
                               <ChevronUp className="h-3 w-3 ml-0.5 opacity-50" />
                             </Button>
                           </motion.div>
                         </TooltipTrigger>
                         <TooltipContent side="top">
-                          <p className="text-xs font-medium">{selectedModelData.name}</p>
-                          <p className="text-xs text-muted-foreground">{selectedModelData.description}</p>
+                          <p className="text-xs font-medium">{currentModelData.name}</p>
+                          <p className="text-xs text-muted-foreground">{currentModelData.description}</p>
                         </TooltipContent>
                       </Tooltip>
-                  }
-                content={
-                  <div className="w-[300px] p-1">
-                    {MODELS.map((model) => (
-                      <button
-                        key={model.id}
-                        onClick={() => {
-                          setSelectedModel(model.id);
-                          setModelPickerOpen(false);
-                        }}
-                        className={cn(
-                          "w-full flex items-start gap-3 p-3 rounded-md transition-colors text-left",
-                          "hover:bg-accent",
-                          selectedModel === model.id && "bg-accent"
-                        )}
-                      >
-                        <div className="mt-0.5">
-                          <span className={model.color}>
-                            {model.icon}
-                          </span>
-                        </div>
-                        <div className="flex-1 space-y-1">
-                          <div className="font-medium text-sm">{model.name}</div>
-                          <div className="text-xs text-muted-foreground">
-                            {model.description}
-                          </div>
-                        </div>
-                      </button>
-                    ))}
-                  </div>
-                }
-                open={modelPickerOpen}
-                onOpenChange={setModelPickerOpen}
-                align="start"
-                side="top"
-              />
+                    }
+                    content={
+                      <div className="w-[300px] p-1">
+                        {currentClient.models.map((model) => (
+                          <button
+                            key={model.id}
+                            onClick={() => {
+                              handleModelChange(model.id);
+                              setModelPickerOpen(false);
+                            }}
+                            className={cn(
+                              "w-full flex items-start gap-3 p-3 rounded-md transition-colors text-left",
+                              "hover:bg-accent",
+                              selectedModelId === model.id && "bg-accent"
+                            )}
+                          >
+                            <div className="mt-0.5 text-primary">{model.icon}</div>
+                            <div className="flex-1 space-y-1">
+                              <div className="font-medium text-sm">{model.name}</div>
+                              <div className="text-xs text-muted-foreground">{model.description}</div>
+                            </div>
+                          </button>
+                        ))}
+                      </div>
+                    }
+                    open={modelPickerOpen}
+                    onOpenChange={setModelPickerOpen}
+                    align="start"
+                    side="top"
+                  />
+                )}
 
-                <Popover
-                  trigger={
-                    <Tooltip>
-                      <TooltipTrigger asChild>
-                        <motion.div
-                          whileTap={{ scale: 0.97 }}
+                {currentClient.supportsThinking && (
+                  <Popover
+                    trigger={
+                      <Tooltip>
+                        <TooltipTrigger asChild>
+                          <motion.div
+                            whileTap={{ scale: 0.97 }}
                             transition={{ duration: 0.15 }}
                           >
                             <Button
@@ -1094,6 +1298,7 @@ const FloatingPromptInputInner = (
                               size="sm"
                               disabled={disabled}
                               className="h-9 px-2 hover:bg-accent/50 gap-1"
+                              onClick={() => setThinkingModePickerOpen(!thinkingModePickerOpen)}
                             >
                               <span className={THINKING_MODES.find(m => m.id === selectedThinkingMode)?.color}>
                                 {THINKING_MODES.find(m => m.id === selectedThinkingMode)?.icon}
@@ -1106,48 +1311,42 @@ const FloatingPromptInputInner = (
                           </motion.div>
                         </TooltipTrigger>
                         <TooltipContent side="top">
-                          <p className="text-xs font-medium">Thinking: {THINKING_MODES.find(m => m.id === selectedThinkingMode)?.name || "Auto"}</p>
+                          <p className="text-xs font-medium">{THINKING_MODES.find(m => m.id === selectedThinkingMode)?.name || "Auto"}</p>
                           <p className="text-xs text-muted-foreground">{THINKING_MODES.find(m => m.id === selectedThinkingMode)?.description}</p>
                         </TooltipContent>
                       </Tooltip>
-                  }
-                content={
-                  <div className="w-[280px] p-1">
-                    {THINKING_MODES.map((mode) => (
-                      <button
-                        key={mode.id}
-                        onClick={() => {
-                          setSelectedThinkingMode(mode.id);
-                          setThinkingModePickerOpen(false);
-                        }}
-                        className={cn(
-                          "w-full flex items-start gap-3 p-3 rounded-md transition-colors text-left",
-                          "hover:bg-accent",
-                          selectedThinkingMode === mode.id && "bg-accent"
-                        )}
-                      >
-                        <span className={cn("mt-0.5", mode.color)}>
-                          {mode.icon}
-                        </span>
-                        <div className="flex-1 space-y-1">
-                          <div className="font-medium text-sm">
-                            {mode.name}
-                          </div>
-                          <div className="text-xs text-muted-foreground">
-                            {mode.description}
-                          </div>
-                        </div>
-                        <ThinkingModeIndicator level={mode.level} />
-                      </button>
-                    ))}
-                  </div>
-                }
-                open={thinkingModePickerOpen}
-                onOpenChange={setThinkingModePickerOpen}
-                align="start"
-                side="top"
-              />
-
+                    }
+                    content={
+                      <div className="w-[280px] p-1">
+                        {THINKING_MODES.map((mode) => (
+                          <button
+                            key={mode.id}
+                            onClick={() => {
+                              setSelectedThinkingMode(mode.id);
+                              setThinkingModePickerOpen(false);
+                            }}
+                            className={cn(
+                              "w-full flex items-start gap-3 p-3 rounded-md transition-colors text-left",
+                              "hover:bg-accent",
+                              selectedThinkingMode === mode.id && "bg-accent"
+                            )}
+                          >
+                            <span className={cn("mt-0.5", mode.color)}>{mode.icon}</span>
+                            <div className="flex-1 space-y-1">
+                              <div className="font-medium text-sm">{mode.name}</div>
+                              <div className="text-xs text-muted-foreground">{mode.description}</div>
+                            </div>
+                            <ThinkingModeIndicator level={mode.level} />
+                          </button>
+                        ))}
+                      </div>
+                    }
+                    open={thinkingModePickerOpen}
+                    onOpenChange={setThinkingModePickerOpen}
+                    align="start"
+                    side="top"
+                  />
+                )}
               </div>
 
               {/* Prompt Input - Center */}
@@ -1158,7 +1357,7 @@ const FloatingPromptInputInner = (
                   onChange={handleTextChange}
                   onKeyDown={handleKeyDown}
                   onPaste={handlePaste}
-                  placeholder={dragActive ? "Drop images here..." : "Message Claude (@ for files, / for commands)..."}
+                  placeholder={dragActive ? "Drop images here..." : currentPlaceholder}
                   disabled={disabled}
                   className={cn(
                     "resize-none pr-20 pl-3 py-2.5 transition-all duration-150",
@@ -1197,7 +1396,7 @@ const FloatingPromptInputInner = (
                     >
                       <Button
                         onClick={isLoading ? onCancel : handleSend}
-                        disabled={isLoading ? false : (!prompt.trim() || disabled)}
+                        disabled={isLoading ? false : (!prompt.trim() || disabled || !selectedModelId)}
                         variant={isLoading ? "destructive" : prompt.trim() ? "default" : "ghost"}
                         size="icon"
                         className={cn(
@@ -1250,7 +1449,6 @@ const FloatingPromptInputInner = (
           </div>
         </div>
       </div>
-    </>
     </TooltipProvider>
   );
 };

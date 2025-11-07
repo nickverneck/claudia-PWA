@@ -6,6 +6,7 @@ use serde::{Deserialize, Serialize};
 use std::cmp::Ordering;
 use std::path::PathBuf;
 use std::process::Command;
+use std::fs;
 use tauri::Manager;
 
 /// Type of Gemini installation
@@ -219,6 +220,7 @@ fn find_standard_installations() -> Vec<GeminiInstallation> {
             ),
         ]);
     }
+    paths_to_check.extend(npm_global_paths("gemini"));
 
     // Check each path
     for (path, source) in paths_to_check {
@@ -254,6 +256,48 @@ fn find_standard_installations() -> Vec<GeminiInstallation> {
     }
 
     installations
+}
+
+fn npm_global_paths(binary: &str) -> Vec<(String, String)> {
+    let mut paths = Vec::new();
+
+    if let Ok(home) = std::env::var("HOME") {
+        let candidates = [
+            (format!("{home}/.npm-global/bin/{binary}"), "npm-global"),
+            (format!("{home}/.local/share/npm/bin/{binary}"), "npm-local"),
+            (format!("{home}/.node_modules/bin/{binary}"), "node-modules"),
+        ];
+        paths.extend(candidates.iter().map(|(path, label)| (path.clone(), label.to_string())));
+
+        let nvm_dir = PathBuf::from(format!("{home}/.nvm/versions/node"));
+        if nvm_dir.exists() {
+            if let Ok(entries) = fs::read_dir(&nvm_dir) {
+                for entry in entries.flatten() {
+                    let bin_path = entry.path().join("bin").join(binary);
+                    if bin_path.exists() {
+                        paths.push((bin_path.to_string_lossy().into_owned(), "nvm".to_string()));
+                    }
+                }
+            }
+        }
+    }
+
+    #[cfg(target_os = "windows")]
+    {
+        if let Ok(userprofile) = std::env::var("USERPROFILE") {
+            let base = PathBuf::from(&userprofile).join("AppData").join("Roaming").join("npm");
+            let cmd = base.join(format!("{binary}.cmd"));
+            if cmd.exists() {
+                paths.push((cmd.to_string_lossy().into_owned(), "npm-windows".to_string()));
+            }
+            let ps1 = base.join(format!("{binary}.ps1"));
+            if ps1.exists() {
+                paths.push((ps1.to_string_lossy().into_owned(), "npm-windows".to_string()));
+            }
+        }
+    }
+
+    paths
 }
 
 /// Get Gemini version by running --version command
@@ -350,4 +394,3 @@ fn compare_versions(a: &str, b: &str) -> Ordering {
 
     Ordering::Equal
 }
-

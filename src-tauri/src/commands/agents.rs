@@ -15,6 +15,8 @@ use tauri_plugin_shell::process::CommandEvent;
 use tokio::io::{AsyncBufReadExt, BufReader as TokioBufReader};
 use tokio::process::Command;
 
+use crate::cli_executors::{codex, gemini, qwen};
+
 /// Finds the full path to the claude binary
 /// This is necessary because macOS apps have a limited PATH environment
 fn find_claude_binary(app_handle: &AppHandle) -> Result<String, String> {
@@ -1847,6 +1849,223 @@ pub async fn list_claude_installations(
     }
 
     Ok(installations)
+}
+
+/// Get the stored Codex binary path from settings
+#[tauri::command]
+pub async fn get_codex_binary_path(db: State<'_, AgentDb>) -> Result<Option<String>, String> {
+    let conn = db.0.lock().map_err(|e| e.to_string())?;
+
+    match conn.query_row(
+        "SELECT value FROM app_settings WHERE key = 'codex_binary_path'",
+        [],
+        |row| row.get::<_, String>(0),
+    ) {
+        Ok(path) => Ok(Some(path)),
+        Err(rusqlite::Error::QueryReturnedNoRows) => Ok(None),
+        Err(e) => Err(format!("Failed to get Codex binary path: {}", e)),
+    }
+}
+
+/// Set the Codex binary path in settings
+#[tauri::command]
+pub async fn set_codex_binary_path(db: State<'_, AgentDb>, path: String) -> Result<(), String> {
+    let conn = db.0.lock().map_err(|e| e.to_string())?;
+
+    let path_buf = std::path::PathBuf::from(&path);
+    if !path_buf.exists() {
+        return Err(format!("File does not exist: {}", path));
+    }
+
+    #[cfg(unix)]
+    {
+        use std::os::unix::fs::PermissionsExt;
+        let metadata = std::fs::metadata(&path_buf)
+            .map_err(|e| format!("Failed to read file metadata: {}", e))?;
+        let permissions = metadata.permissions();
+        if permissions.mode() & 0o111 == 0 {
+            return Err(format!("File is not executable: {}", path));
+        }
+    }
+
+    conn.execute(
+        "INSERT INTO app_settings (key, value) VALUES ('codex_binary_path', ?1)
+         ON CONFLICT(key) DO UPDATE SET value = ?1",
+        params![path],
+    )
+    .map_err(|e| format!("Failed to save Codex binary path: {}", e))?;
+
+    Ok(())
+}
+
+/// List available Codex installations
+#[tauri::command]
+pub async fn list_codex_installations(
+    _app: AppHandle,
+) -> Result<Vec<codex::CodexInstallation>, String> {
+    let installations = codex::discover_codex_installations();
+
+    if installations.is_empty() {
+        return Err("No Codex CLI installations found on the system".to_string());
+    }
+
+    Ok(installations)
+}
+
+/// Get the stored Gemini binary path from settings
+#[tauri::command]
+pub async fn get_gemini_binary_path(db: State<'_, AgentDb>) -> Result<Option<String>, String> {
+    let conn = db.0.lock().map_err(|e| e.to_string())?;
+
+    match conn.query_row(
+        "SELECT value FROM app_settings WHERE key = 'gemini_binary_path'",
+        [],
+        |row| row.get::<_, String>(0),
+    ) {
+        Ok(path) => Ok(Some(path)),
+        Err(rusqlite::Error::QueryReturnedNoRows) => Ok(None),
+        Err(e) => Err(format!("Failed to get Gemini binary path: {}", e)),
+    }
+}
+
+/// Set the Gemini binary path in settings
+#[tauri::command]
+pub async fn set_gemini_binary_path(db: State<'_, AgentDb>, path: String) -> Result<(), String> {
+    let conn = db.0.lock().map_err(|e| e.to_string())?;
+
+    let path_buf = std::path::PathBuf::from(&path);
+    if !path_buf.exists() {
+        return Err(format!("File does not exist: {}", path));
+    }
+
+    #[cfg(unix)]
+    {
+        use std::os::unix::fs::PermissionsExt;
+        let metadata = std::fs::metadata(&path_buf)
+            .map_err(|e| format!("Failed to read file metadata: {}", e))?;
+        let permissions = metadata.permissions();
+        if permissions.mode() & 0o111 == 0 {
+            return Err(format!("File is not executable: {}", path));
+        }
+    }
+
+    conn.execute(
+        "INSERT INTO app_settings (key, value) VALUES ('gemini_binary_path', ?1)
+         ON CONFLICT(key) DO UPDATE SET value = ?1",
+        params![path],
+    )
+    .map_err(|e| format!("Failed to save Gemini binary path: {}", e))?;
+
+    Ok(())
+}
+
+/// List available Gemini installations
+#[tauri::command]
+pub async fn list_gemini_installations(
+    _app: AppHandle,
+) -> Result<Vec<gemini::GeminiInstallation>, String> {
+    let installations = gemini::discover_gemini_installations();
+
+    if installations.is_empty() {
+        return Err("No Gemini CLI installations found on the system".to_string());
+    }
+
+    Ok(installations)
+}
+
+/// Get the stored Qwen binary path from settings
+#[tauri::command]
+pub async fn get_qwen_binary_path(db: State<'_, AgentDb>) -> Result<Option<String>, String> {
+    let conn = db.0.lock().map_err(|e| e.to_string())?;
+
+    match conn.query_row(
+        "SELECT value FROM app_settings WHERE key = 'qwen_binary_path'",
+        [],
+        |row| row.get::<_, String>(0),
+    ) {
+        Ok(path) => Ok(Some(path)),
+        Err(rusqlite::Error::QueryReturnedNoRows) => Ok(None),
+        Err(e) => Err(format!("Failed to get Qwen binary path: {}", e)),
+    }
+}
+
+/// Set the Qwen binary path in settings
+#[tauri::command]
+pub async fn set_qwen_binary_path(db: State<'_, AgentDb>, path: String) -> Result<(), String> {
+    let conn = db.0.lock().map_err(|e| e.to_string())?;
+
+    let path_buf = std::path::PathBuf::from(&path);
+    if !path_buf.exists() {
+        return Err(format!("File does not exist: {}", path));
+    }
+
+    #[cfg(unix)]
+    {
+        use std::os::unix::fs::PermissionsExt;
+        let metadata = std::fs::metadata(&path_buf)
+            .map_err(|e| format!("Failed to read file metadata: {}", e))?;
+        let permissions = metadata.permissions();
+        if permissions.mode() & 0o111 == 0 {
+            return Err(format!("File is not executable: {}", path));
+        }
+    }
+
+    conn.execute(
+        "INSERT INTO app_settings (key, value) VALUES ('qwen_binary_path', ?1)
+         ON CONFLICT(key) DO UPDATE SET value = ?1",
+        params![path],
+    )
+    .map_err(|e| format!("Failed to save Qwen binary path: {}", e))?;
+
+    Ok(())
+}
+
+/// List available Qwen installations
+#[tauri::command]
+pub async fn list_qwen_installations(
+    _app: AppHandle,
+) -> Result<Vec<qwen::QwenInstallation>, String> {
+    let installations = qwen::discover_qwen_installations();
+
+    if installations.is_empty() {
+        return Err("No Qwen3 Coder installations found on the system".to_string());
+    }
+
+    Ok(installations)
+}
+
+/// Get the preferred CLI provider used when starting new sessions
+#[tauri::command]
+pub async fn get_primary_cli_provider(db: State<'_, AgentDb>) -> Result<Option<String>, String> {
+    let conn = db.0.lock().map_err(|e| e.to_string())?;
+
+    match conn.query_row(
+        "SELECT value FROM app_settings WHERE key = 'primary_cli_provider'",
+        [],
+        |row| row.get::<_, String>(0),
+    ) {
+        Ok(provider) => Ok(Some(provider)),
+        Err(rusqlite::Error::QueryReturnedNoRows) => Ok(None),
+        Err(e) => Err(format!("Failed to get primary CLI provider: {}", e)),
+    }
+}
+
+/// Persist the preferred CLI provider for new sessions
+#[tauri::command]
+pub async fn set_primary_cli_provider(
+    db: State<'_, AgentDb>,
+    provider: String,
+) -> Result<(), String> {
+    let conn = db.0.lock().map_err(|e| e.to_string())?;
+
+    conn.execute(
+        "INSERT INTO app_settings (key, value) VALUES ('primary_cli_provider', ?1)
+         ON CONFLICT(key) DO UPDATE SET value = ?1",
+        params![provider],
+    )
+    .map_err(|e| format!("Failed to save primary CLI provider: {}", e))?;
+
+    Ok(())
 }
 
 /// Helper function to create a tokio Command with proper environment variables

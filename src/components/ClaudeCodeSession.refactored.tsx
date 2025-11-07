@@ -6,7 +6,7 @@ import { Label } from "@/components/ui/label";
 import { api, type Session } from "@/lib/api";
 import { cn } from "@/lib/utils";
 import { open } from "@tauri-apps/plugin-dialog";
-import { FloatingPromptInput, type FloatingPromptInputRef } from "./FloatingPromptInput";
+import { FloatingPromptInput, type FloatingPromptInputRef, type PromptSendPayload } from "./FloatingPromptInput";
 import { ErrorBoundary } from "./ErrorBoundary";
 import { TimelineNavigator } from "./TimelineNavigator";
 import { CheckpointSettings } from "./CheckpointSettings";
@@ -106,13 +106,13 @@ export const ClaudeCodeSession: React.FC<ClaudeCodeSessionProps> = ({
   };
 
   // Handle sending prompts
-  const handleSendPrompt = useCallback(async (prompt: string, model: "sonnet" | "opus", toolName?: string) => {
+  const handleSendPrompt = useCallback(async ({ prompt, model }: PromptSendPayload, toolName?: string) => {
     if (!projectPath || !prompt.trim()) return;
 
     // Add to queue if streaming
     if (isStreaming) {
       const id = Date.now().toString();
-      setQueuedPrompts(prev => [...prev, { id, prompt, model, toolName }]);
+      setQueuedPrompts(prev => [...prev, { id, prompt, model: (model as "sonnet" | "opus") || "sonnet", toolName }]);
       return;
     }
 
@@ -133,8 +133,15 @@ export const ClaudeCodeSession: React.FC<ClaudeCodeSessionProps> = ({
 
     const nextPrompt = queuedPrompts[0];
     setQueuedPrompts(prev => prev.slice(1));
-    
-    await handleSendPrompt(nextPrompt.prompt, nextPrompt.model, nextPrompt.toolName);
+
+    await handleSendPrompt(
+      {
+        prompt: nextPrompt.prompt,
+        model: nextPrompt.model,
+        provider: "claude",
+      },
+      nextPrompt.toolName
+    );
   }, [queuedPrompts, isStreaming, handleSendPrompt]);
 
   // Effect to process queue when streaming stops

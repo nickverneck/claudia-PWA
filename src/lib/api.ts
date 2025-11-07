@@ -111,6 +111,10 @@ export interface ClaudeInstallation {
   installation_type: "System" | "Custom";
 }
 
+export type CodexInstallation = ClaudeInstallation;
+export type GeminiInstallation = ClaudeInstallation;
+export type QwenInstallation = ClaudeInstallation;
+
 // Agent API types
 export interface Agent {
   id?: number;
@@ -1591,6 +1595,138 @@ export const api = {
       return await invoke<ClaudeInstallation[]>("list_claude_installations");
     } catch (error) {
       console.error("Failed to list Claude installations:", error);
+      throw error;
+    }
+  },
+
+  /**
+   * Get the stored Codex binary path from settings
+   */
+  async getCodexBinaryPath(): Promise<string | null> {
+    try {
+      return await invoke<string | null>("get_codex_binary_path");
+    } catch (error) {
+      console.error("Failed to get Codex binary path:", error);
+      throw error;
+    }
+  },
+
+  /**
+   * Set the Codex binary path in settings
+   */
+  async setCodexBinaryPath(path: string): Promise<void> {
+    try {
+      return await invoke<void>("set_codex_binary_path", { path });
+    } catch (error) {
+      console.error("Failed to set Codex binary path:", error);
+      throw error;
+    }
+  },
+
+  /**
+   * List all available Codex installations on the system
+   */
+  async listCodexInstallations(): Promise<CodexInstallation[]> {
+    try {
+      return await invoke<CodexInstallation[]>("list_codex_installations");
+    } catch (error) {
+      console.error("Failed to list Codex installations:", error);
+      throw error;
+    }
+  },
+
+  /**
+   * Get the stored Gemini binary path from settings
+   */
+  async getGeminiBinaryPath(): Promise<string | null> {
+    try {
+      return await invoke<string | null>("get_gemini_binary_path");
+    } catch (error) {
+      console.error("Failed to get Gemini binary path:", error);
+      throw error;
+    }
+  },
+
+  /**
+   * Set the Gemini binary path in settings
+   */
+  async setGeminiBinaryPath(path: string): Promise<void> {
+    try {
+      return await invoke<void>("set_gemini_binary_path", { path });
+    } catch (error) {
+      console.error("Failed to set Gemini binary path:", error);
+      throw error;
+    }
+  },
+
+  /**
+   * List all available Gemini installations on the system
+   */
+  async listGeminiInstallations(): Promise<GeminiInstallation[]> {
+    try {
+      return await invoke<GeminiInstallation[]>("list_gemini_installations");
+    } catch (error) {
+      console.error("Failed to list Gemini installations:", error);
+      throw error;
+    }
+  },
+
+  /**
+   * Get the stored Qwen binary path from settings
+   */
+  async getQwenBinaryPath(): Promise<string | null> {
+    try {
+      return await invoke<string | null>("get_qwen_binary_path");
+    } catch (error) {
+      console.error("Failed to get Qwen binary path:", error);
+      throw error;
+    }
+  },
+
+  /**
+   * Set the Qwen binary path in settings
+   */
+  async setQwenBinaryPath(path: string): Promise<void> {
+    try {
+      return await invoke<void>("set_qwen_binary_path", { path });
+    } catch (error) {
+      console.error("Failed to set Qwen binary path:", error);
+      throw error;
+    }
+  },
+
+  /**
+   * List all available Qwen installations on the system
+   */
+  async listQwenInstallations(): Promise<QwenInstallation[]> {
+    try {
+      return await invoke<QwenInstallation[]>("list_qwen_installations");
+    } catch (error) {
+      console.error("Failed to list Qwen installations:", error);
+      throw error;
+    }
+  },
+
+  /**
+   * Get the preferred CLI provider used for new sessions
+   */
+  async getPrimaryCliProvider(): Promise<string | null> {
+    try {
+      return await invoke<string | null>("get_primary_cli_provider");
+    } catch (error) {
+      console.error("Failed to get primary CLI provider:", error);
+      throw error;
+    }
+  },
+
+  /**
+   * Persist the preferred CLI provider used for new sessions
+   */
+  async setPrimaryCliProvider(provider: string): Promise<void> {
+    try {
+      return await invoke<void>("set_primary_cli_provider", { provider });
+    } catch (error) {
+      console.error("Failed to set primary CLI provider:", error);
       throw error;
     }
   },
