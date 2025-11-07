@@ -89,6 +89,7 @@ export const ClaudeCodeSession: React.FC<ClaudeCodeSessionProps> = ({
   const [totalTokens, setTotalTokens] = useState(0);
   const [extractedSessionInfo] = useState<{ sessionId: string; projectId: string } | null>(null);
   const [currentAgentRunId, setCurrentAgentRunId] = useState<number | null>(agentRun?.id || null);
+  const [currentCliSessionId, setCurrentCliSessionId] = useState<string | null>(null);
   const cliProviderIds = CLI_CLIENTS.map((client) => client.id);
   const isCliProvider = (value: string | null | undefined): value is CliProviderId =>
     value != null && (cliProviderIds as CliProviderId[]).includes(value as CliProviderId);
@@ -301,7 +302,8 @@ export const ClaudeCodeSession: React.FC<ClaudeCodeSessionProps> = ({
   useEffect(() => {
     if (agentRun) { 
       // Set the currentAgentRunId immediately when we have an agentRun
-      setCurrentAgentRunId(agentRun.id !== undefined ? agentRun.id : null); 
+      setCurrentAgentRunId(agentRun.id !== undefined ? agentRun.id : null);
+      setCurrentCliSessionId(null);
       
       // Load session history first, then check for active session
       const initializeSession = async () => {
@@ -318,8 +320,9 @@ export const ClaudeCodeSession: React.FC<ClaudeCodeSessionProps> = ({
 
   // Report streaming state changes
   useEffect(() => {
-    onStreamingChange?.(isLoading, currentAgentRunId?.toString() || null); // Use currentAgentRunId
-  }, [isLoading, currentAgentRunId, onStreamingChange]);
+    const streamingId = currentAgentRunId != null ? currentAgentRunId.toString() : currentCliSessionId;
+    onStreamingChange?.(isLoading, streamingId);
+  }, [isLoading, currentAgentRunId, currentCliSessionId, onStreamingChange]);
 
   // Auto-scroll to bottom when new messages arrive
   useEffect(() => {
@@ -492,13 +495,18 @@ export const ClaudeCodeSession: React.FC<ClaudeCodeSessionProps> = ({
       return;
     }
 
+    const providerToUse: CliProviderId = agentRun && isCliProvider(agentRun.provider)
+      ? (agentRun.provider as CliProviderId)
+      : provider;
+    const modelToUse = model;
+
     // If already loading, queue the prompt
     if (isLoading) {
       const newPrompt = {
         id: `${Date.now()}-${Math.random().toString(36).substr(2, 9)}`,
         prompt,
-        model,
-        provider,
+        model: modelToUse,
+        provider: providerToUse,
       };
       setQueuedPrompts(prev => [...prev, newPrompt]);
       return;
@@ -565,10 +573,10 @@ export const ClaudeCodeSession: React.FC<ClaudeCodeSessionProps> = ({
         ? sessionMetrics.current.modelChanges[sessionMetrics.current.modelChanges.length - 1].to
         : composerSelection.model;
       
-      if (lastModel !== model) {
+      if (lastModel !== modelToUse) {
         sessionMetrics.current.modelChanges.push({
           from: lastModel,
-          to: model,
+          to: modelToUse,
           timestamp: Date.now()
         });
       }
@@ -582,7 +590,7 @@ export const ClaudeCodeSession: React.FC<ClaudeCodeSessionProps> = ({
       
       trackEvent.enhancedPromptSubmitted({
         prompt_length: prompt.length,
-        model,
+        model: modelToUse,
         has_attachments: false, // TODO: Add attachment support when implemented
         source: 'keyboard', // TODO: Track actual source (keyboard vs button)
         word_count: wordCount,
@@ -595,13 +603,26 @@ export const ClaudeCodeSession: React.FC<ClaudeCodeSessionProps> = ({
 
       // Execute the appropriate command
       // The executeAgent API call now handles starting/resuming based on runId and agentId
-      await api.executeAgent(
-        agentRun?.agent_id || 0, // Pass agent_id if available, otherwise 0 (will be handled by backend)
-        projectPath,
-        prompt,
-        model,
-        provider,
-      );
+      if (agentRun) {
+        const runId = await api.executeAgent(
+          agentRun.agent_id || 0,
+          projectPath,
+          prompt,
+          modelToUse,
+          providerToUse,
+        );
+        if (typeof runId === "number") {
+          setCurrentAgentRunId(runId);
+        }
+      } else {
+        const sessionId = await api.executeCliPrompt(
+          providerToUse,
+          modelToUse,
+          projectPath,
+          prompt,
+        );
+        setCurrentCliSessionId(sessionId);
+      }
     } catch (err) {
       console.error("Failed to send prompt:", err);
       setError("Failed to send prompt");
@@ -693,9 +714,12 @@ export const ClaudeCodeSession: React.FC<ClaudeCodeSessionProps> = ({
     setIsLoading(false);
     hasActiveSessionRef.current = false;
     isListeningRef.current = false; // Reset listening state
+    if (!currentAgentRunId) {
+      setCurrentCliSessionId(null);
+    }
     
     // Track enhanced session stopped metrics when session completes
-    if (effectiveSession && currentAgentRunId) {
+    if (effectiveSession && (currentAgentRunId || currentCliSessionId)) {
       const sessionStartTimeValue = messages.length > 0 && messages[0].timestamp ? new Date(messages[0].timestamp).getTime() : Date.now();
       const duration = Date.now() - sessionStartTimeValue;
       const metrics = sessionMetrics.current;
@@ -877,13 +901,19 @@ export const ClaudeCodeSession: React.FC<ClaudeCodeSessionProps> = ({
   };
 
   const handleCancelExecution = async () => {
-    if (!currentAgentRunId || !isLoading) return;
-    
+    if (!isLoading) return;
+    if (!currentAgentRunId && !currentCliSessionId) return;
+
     try {
       const sessionStartTimeValue = messages.length > 0 && messages[0].timestamp ? new Date(messages[0].timestamp).getTime() : Date.now();
       const duration = Date.now() - sessionStartTimeValue;
       
-      await api.killAgentSession(currentAgentRunId);
+      if (currentAgentRunId) {
+        await api.killAgentSession(currentAgentRunId);
+      } else if (currentCliSessionId) {
+        await api.cancelCliSession(currentCliSessionId);
+        setCurrentCliSessionId(null);
+      }
       
       // Calculate metrics for enhanced analytics
       const metrics = sessionMetrics.current;

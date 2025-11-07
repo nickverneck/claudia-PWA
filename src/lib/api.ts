@@ -1708,6 +1708,30 @@ export const api = {
   },
 
   /**
+   * Execute an ad-hoc CLI prompt without creating an agent
+   */
+  async executeCliPrompt(provider: string, model: string, projectPath: string, prompt: string): Promise<string> {
+    try {
+      return await invoke<string>("execute_cli_prompt", { provider, model, projectPath, prompt });
+    } catch (error) {
+      console.error("Failed to execute CLI prompt:", error);
+      throw error;
+    }
+  },
+
+  /**
+   * Cancel an ad-hoc CLI session
+   */
+  async cancelCliSession(sessionId: string): Promise<void> {
+    try {
+      await invoke<void>("cancel_claude_execution", { sessionId });
+    } catch (error) {
+      console.error("Failed to cancel CLI session:", error);
+      throw error;
+    }
+  },
+
+  /**
    * Get the preferred CLI provider used for new sessions
    */
   async getPrimaryCliProvider(): Promise<string | null> {

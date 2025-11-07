@@ -109,6 +109,14 @@ export const AgentExecution: React.FC<AgentExecutionProps> = ({
       if (m === 'gemini-2.5-pro') return 'Gemini 2.5 Pro';
       if (m === 'gemini-2.5-flash') return 'Gemini 2.5 Flash';
     }
+    if (prov === 'openai') {
+      if (m === 'gpt-5-codex') return 'GPT-5 Codex';
+      if (m === 'gpt-5') return 'GPT-5';
+    }
+    if (prov === 'qwen') {
+      if (m === 'qwen-coder') return 'Qwen Coder';
+      if (m === 'qwen-vision') return 'Qwen Vision';
+    }
     return m;
   };
   

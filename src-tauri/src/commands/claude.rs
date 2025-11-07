@@ -8,6 +8,7 @@ use tauri::{AppHandle, Emitter, Manager};
 use tokio::process::Command;
 use crate::cli_manager;
 use crate::claude_binary::find_claude_binary;
+use uuid::Uuid;
 
 
 
@@ -904,6 +905,36 @@ pub async fn resume_claude_code(
     )
     .await
     .map(|_| ()) // Convert Result<u32, String> to Result<(), String>
+}
+
+/// Execute a generic CLI prompt for the selected provider
+#[tauri::command]
+pub async fn execute_cli_prompt(
+    app: AppHandle,
+    provider: String,
+    model: String,
+    project_path: String,
+    prompt: String,
+) -> Result<String, String> {
+    let session_id = Uuid::new_v4().to_string();
+    let cli_provider = match provider.to_lowercase().as_str() {
+        "gemini" => crate::cli_manager::CliProvider::Gemini,
+        "openai" | "codex" | "gpt" => crate::cli_manager::CliProvider::OpenAI,
+        "qwen" => crate::cli_manager::CliProvider::Qwen,
+        "aider" => crate::cli_manager::CliProvider::Aider,
+        _ => crate::cli_manager::CliProvider::Claude,
+    };
+
+    cli_manager::execute_cli_command(
+        app,
+        cli_provider,
+        model,
+        project_path,
+        prompt,
+        session_id.clone(),
+    )
+    .await
+    .map(|_| session_id)
 }
 
 /// Cancel the currently running Claude Code execution

@@ -219,7 +219,8 @@ pub async fn execute_cli_command(
                 let registry = app_handle_clone.state::<ProcessRegistryState>();
                 let _ = registry.0.append_live_output(run_id, &format!("{}\n", line));
             }
-            app_handle_clone.emit(&format!("agent-output:{}", session_id_clone), line).unwrap();
+            let _ = app_handle_clone.emit(&format!("agent-output:{}", session_id_clone), &line);
+            let _ = app_handle_clone.emit("agent-output", &line);
         }
     });
 
@@ -236,7 +237,8 @@ pub async fn execute_cli_command(
                 let registry = app_handle_clone.state::<ProcessRegistryState>();
                 let _ = registry.0.append_live_output(run_id, &format!("{}\n", line));
             }
-            app_handle_clone.emit(&format!("agent-error:{}", session_id_clone), line).unwrap();
+            let _ = app_handle_clone.emit(&format!("agent-error:{}", session_id_clone), &line);
+            let _ = app_handle_clone.emit("agent-error", &line);
         }
     });
 
@@ -248,9 +250,8 @@ pub async fn execute_cli_command(
         let status = child.wait().await.unwrap();
         let success = status.success();
         // Emit a generic event for agent completion
-        app_handle_clone
-            .emit(&format!("agent-complete:{}", session_id_clone), success)
-            .unwrap();
+        let _ = app_handle_clone.emit(&format!("agent-complete:{}", session_id_clone), success);
+        let _ = app_handle_clone.emit("agent-complete", success);
 
         // Unregister from ProcessRegistry if we registered earlier
         if let Some(run_id) = run_id_opt {

@@ -488,12 +488,12 @@ export const CreateAgent: React.FC<CreateAgentProps> = ({
                   <div className="flex flex-col sm:flex-row gap-2">
                     <motion.button
                       type="button"
-                      onClick={() => setModel("gpt-4o")}
+                      onClick={() => setModel("gpt-5-codex")}
                       whileTap={{ scale: 0.97 }}
                       transition={{ duration: 0.15 }}
                       className={cn(
                         "flex-1 px-4 py-3 rounded-md border transition-all",
-                        model === "gpt-4o"
+                        model === "gpt-5-codex"
                           ? "border-primary bg-primary/10 text-primary"
                           : "border-border hover:border-primary/50 hover:bg-accent"
                       )}
@@ -501,22 +501,22 @@ export const CreateAgent: React.FC<CreateAgentProps> = ({
                       <div className="flex items-center gap-3">
                         <Zap className={cn(
                           "h-4 w-4",
-                          model === "gpt-4o" ? "text-primary" : "text-muted-foreground"
+                          model === "gpt-5-codex" ? "text-primary" : "text-muted-foreground"
                         )} />
                         <div className="text-left">
-                          <div className="text-body-small font-medium">GPT-4o</div>
-                          <div className="text-caption text-muted-foreground">OpenAI's most advanced, multimodal model</div>
+                          <div className="text-body-small font-medium">GPT-5 Codex</div>
+                          <div className="text-caption text-muted-foreground">Newest OpenAI model tuned for coding workflows</div>
                         </div>
                       </div>
                     </motion.button>
                     <motion.button
                       type="button"
-                      onClick={() => setModel("gpt-3.5-turbo")}
+                      onClick={() => setModel("gpt-5")}
                       whileTap={{ scale: 0.97 }}
                       transition={{ duration: 0.15 }}
                       className={cn(
                         "flex-1 px-4 py-3 rounded-md border transition-all",
-                        model === "gpt-3.5-turbo"
+                        model === "gpt-5"
                           ? "border-primary bg-primary/10 text-primary"
                           : "border-border hover:border-primary/50 hover:bg-accent"
                       )}
@@ -524,11 +524,11 @@ export const CreateAgent: React.FC<CreateAgentProps> = ({
                       <div className="flex items-center gap-3">
                         <Zap className={cn(
                           "h-4 w-4",
-                          model === "gpt-3.5-turbo" ? "text-primary" : "text-muted-foreground"
+                          model === "gpt-5" ? "text-primary" : "text-muted-foreground"
                         )} />
                         <div className="text-left">
-                          <div className="text-body-small font-medium">GPT-3.5 Turbo</div>
-                          <div className="text-caption text-muted-foreground">Fast and cost-effective</div>
+                          <div className="text-body-small font-medium">GPT-5</div>
+                          <div className="text-caption text-muted-foreground">General-purpose reasoning model</div>
                         </div>
                       </div>
                     </motion.button>
@@ -541,12 +541,12 @@ export const CreateAgent: React.FC<CreateAgentProps> = ({
                   <div className="flex flex-col sm:flex-row gap-2">
                     <motion.button
                       type="button"
-                      onClick={() => setModel("qwen-plus")}
+                      onClick={() => setModel("qwen-coder")}
                       whileTap={{ scale: 0.97 }}
                       transition={{ duration: 0.15 }}
                       className={cn(
                         "flex-1 px-4 py-3 rounded-md border transition-all",
-                        model === "qwen-plus"
+                        model === "qwen-coder"
                           ? "border-primary bg-primary/10 text-primary"
                           : "border-border hover:border-primary/50 hover:bg-accent"
                       )}
@@ -554,22 +554,22 @@ export const CreateAgent: React.FC<CreateAgentProps> = ({
                       <div className="flex items-center gap-3">
                         <Zap className={cn(
                           "h-4 w-4",
-                          model === "qwen-plus" ? "text-primary" : "text-muted-foreground"
+                          model === "qwen-coder" ? "text-primary" : "text-muted-foreground"
                         )} />
                         <div className="text-left">
-                          <div className="text-body-small font-medium">Qwen-Plus</div>
-                          <div className="text-caption text-muted-foreground">Alibaba's powerful model</div>
+                          <div className="text-body-small font-medium">Qwen Coder</div>
+                          <div className="text-caption text-muted-foreground">Qwen3 model specialized for coding</div>
                         </div>
                       </div>
                     </motion.button>
                     <motion.button
                       type="button"
-                      onClick={() => setModel("qwen-turbo")}
+                      onClick={() => setModel("qwen-vision")}
                       whileTap={{ scale: 0.97 }}
                       transition={{ duration: 0.15 }}
                       className={cn(
                         "flex-1 px-4 py-3 rounded-md border transition-all",
-                        model === "qwen-turbo"
+                        model === "qwen-vision"
                           ? "border-primary bg-primary/10 text-primary"
                           : "border-border hover:border-primary/50 hover:bg-accent"
                       )}
@@ -577,11 +577,11 @@ export const CreateAgent: React.FC<CreateAgentProps> = ({
                       <div className="flex items-center gap-3">
                         <Zap className={cn(
                           "h-4 w-4",
-                          model === "qwen-turbo" ? "text-primary" : "text-muted-foreground"
+                          model === "qwen-vision" ? "text-primary" : "text-muted-foreground"
                         )} />
                         <div className="text-left">
-                          <div className="text-body-small font-medium">Qwen-Turbo</div>
-                          <div className="text-caption text-muted-foreground">Fast and efficient Qwen model</div>
+                          <div className="text-body-small font-medium">Qwen Vision</div>
+                          <div className="text-caption text-muted-foreground">Vision-enabled Qwen reasoning</div>
                         </div>
                       </div>
                     </motion.button>

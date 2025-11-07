@@ -16,6 +16,7 @@ use tokio::io::{AsyncBufReadExt, BufReader as TokioBufReader};
 use tokio::process::Command;
 
 use crate::cli_executors::{codex, gemini, qwen};
+use crate::cli_manager::CliProvider;
 
 /// Finds the full path to the claude binary
 /// This is necessary because macOS apps have a limited PATH environment
@@ -704,6 +705,7 @@ pub async fn execute_agent(
     project_path: String,
     task: String,
     model: Option<String>,
+    provider: Option<String>,
     db: State<'_, AgentDb>,
     registry: State<'_, crate::process::ProcessRegistryState>,
 ) -> Result<i64, String> {
@@ -712,6 +714,8 @@ pub async fn execute_agent(
     // Get the agent from database
     let agent = get_agent(db.clone(), agent_id).await?;
     let execution_model = model.unwrap_or(agent.model.clone());
+    let provider_value = provider.unwrap_or_else(|| agent.provider.clone());
+    let cli_provider = resolve_cli_provider(&provider_value);
     
     // Create .claude/settings.json with agent hooks if it doesn't exist
     if let Some(hooks_json) = &agent.hooks {
@@ -760,35 +764,78 @@ pub async fn execute_agent(
         conn.last_insert_rowid()
     };
 
-    // Find Claude binary
-    info!("Running agent '{}'", agent.name);
-    let claude_path = match find_claude_binary(&app) {
-        Ok(path) => path,
-        Err(e) => {
-            error!("Failed to find claude binary: {}", e);
-            return Err(e);
+    match cli_provider {
+        CliProvider::Claude => {
+            info!("Running agent '{}'", agent.name);
+            let claude_path = match find_claude_binary(&app) {
+                Ok(path) => path,
+                Err(e) => {
+                    error!("Failed to find claude binary: {}", e);
+                    return Err(e);
+                }
+            };
+
+            // Build arguments
+            let args = vec![
+                "-p".to_string(),
+                task.clone(),
+                "--system-prompt".to_string(),
+                agent.system_prompt.clone(),
+                "--model".to_string(),
+                execution_model.clone(),
+                "--output-format".to_string(),
+                "stream-json".to_string(),
+                "--verbose".to_string(),
+                "--dangerously-skip-permissions".to_string(),
+            ];
+
+            // Execute based on whether we should use sidecar or system binary
+            if should_use_sidecar(&claude_path) {
+                spawn_agent_sidecar(
+                    app,
+                    run_id,
+                    agent_id,
+                    agent.name.clone(),
+                    args,
+                    project_path,
+                    task,
+                    execution_model,
+                    db,
+                    registry,
+                )
+                .await
+            } else {
+                spawn_agent_system(
+                    app,
+                    run_id,
+                    agent_id,
+                    agent.name.clone(),
+                    claude_path,
+                    args,
+                    project_path,
+                    task,
+                    execution_model,
+                    db,
+                    registry,
+                )
+                .await
+            }
         }
-    };
-
-    // Build arguments
-    let args = vec![
-        "-p".to_string(),
-        task.clone(),
-        "--system-prompt".to_string(),
-        agent.system_prompt.clone(),
-        "--model".to_string(),
-        execution_model.clone(),
-        "--output-format".to_string(),
-        "stream-json".to_string(),
-        "--verbose".to_string(),
-        "--dangerously-skip-permissions".to_string(),
-    ];
-
-    // Execute based on whether we should use sidecar or system binary
-    if should_use_sidecar(&claude_path) {
-        spawn_agent_sidecar(app, run_id, agent_id, agent.name.clone(), args, project_path, task, execution_model, db, registry).await
-    } else {
-        spawn_agent_system(app, run_id, agent_id, agent.name.clone(), claude_path, args, project_path, task, execution_model, db, registry).await
+        other_provider => {
+            spawn_non_claude_agent(
+                app,
+                run_id,
+                agent_id,
+                agent.name.clone(),
+                other_provider,
+                project_path,
+                task,
+                execution_model,
+                db,
+                registry,
+            )
+            .await
+        }
     }
 }
 
@@ -1346,6 +1393,97 @@ async fn spawn_agent_system(
     });
 
     Ok(run_id)
+}
+
+async fn spawn_non_claude_agent(
+    app: AppHandle,
+    run_id: i64,
+    agent_id: i64,
+    agent_name: String,
+    provider: CliProvider,
+    project_path: String,
+    task: String,
+    execution_model: String,
+    db: State<'_, AgentDb>,
+    registry: State<'_, crate::process::ProcessRegistryState>,
+) -> Result<i64, String> {
+    let (binary_path, args) = match provider {
+        CliProvider::Gemini => {
+            let installations = gemini::discover_gemini_installations();
+            let best = gemini::select_best_installation(installations)
+                .ok_or_else(|| "No Gemini CLI installations found".to_string())?;
+            let args = vec![
+                "cli".to_string(),
+                "run".to_string(),
+                "--model".to_string(),
+                execution_model.clone(),
+                "--project".to_string(),
+                project_path.clone(),
+                "--task".to_string(),
+                task.clone(),
+            ];
+            (best.path, args)
+        }
+        CliProvider::OpenAI => {
+            let installations = codex::discover_codex_installations();
+            let best = codex::select_best_installation(installations)
+                .ok_or_else(|| "No Codex CLI installations found".to_string())?;
+            let args = vec![
+                "run".to_string(),
+                "--model".to_string(),
+                execution_model.clone(),
+                "--project".to_string(),
+                project_path.clone(),
+                "--task".to_string(),
+                task.clone(),
+            ];
+            (best.path, args)
+        }
+        CliProvider::Qwen => {
+            let installations = qwen::discover_qwen_installations();
+            let best = qwen::select_best_installation(installations)
+                .ok_or_else(|| "No Qwen CLI installations found".to_string())?;
+            let args = vec![
+                "code".to_string(),
+                "--model".to_string(),
+                execution_model.clone(),
+                "--project".to_string(),
+                project_path.clone(),
+                "--task".to_string(),
+                task.clone(),
+            ];
+            (best.path, args)
+        }
+        CliProvider::Aider => {
+            return Err("Aider CLI execution is not yet supported in agent runs".to_string());
+        }
+        CliProvider::Claude => unreachable!("Handled earlier"),
+    };
+
+    spawn_agent_system(
+        app,
+        run_id,
+        agent_id,
+        agent_name,
+        binary_path,
+        args,
+        project_path,
+        task,
+        execution_model,
+        db,
+        registry,
+    )
+    .await
+}
+
+fn resolve_cli_provider(value: &str) -> CliProvider {
+    match value.to_lowercase().as_str() {
+        "gemini" => CliProvider::Gemini,
+        "openai" | "codex" | "gpt" => CliProvider::OpenAI,
+        "qwen" | "qwen3" => CliProvider::Qwen,
+        "aider" => CliProvider::Aider,
+        _ => CliProvider::Claude,
+    }
 }
 
 /// List all currently running agent sessions
