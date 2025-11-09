@@ -11,7 +11,9 @@ import {
   ChevronDown,
   Maximize2,
   X,
-  Settings2
+  Settings2,
+  Sparkles,
+  Zap,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -57,6 +59,33 @@ interface AgentExecutionProps {
    */
   className?: string;
 }
+
+const GEMINI_EXECUTION_MODELS = [
+  {
+    id: "auto",
+    title: "Gemini Auto",
+    description: "Let Gemini automatically choose the right mode for each action.",
+    icon: <Sparkles className="h-4 w-4 text-primary" />,
+  },
+  {
+    id: "pro",
+    title: "Gemini Pro",
+    description: "Full capability for complex, multi-step reasoning.",
+    icon: <Zap className="h-4 w-4 text-primary" />,
+  },
+  {
+    id: "flash",
+    title: "Gemini Flash",
+    description: "Balanced model when you need speed plus quality.",
+    icon: <Zap className="h-4 w-4 text-primary/80" />,
+  },
+  {
+    id: "flash-lite",
+    title: "Gemini Flash Lite",
+    description: "Fastest responses for lightweight edits and questions.",
+    icon: <Zap className="h-4 w-4 text-primary/60" />,
+  },
+];
 
 export interface ClaudeStreamMessage {
   type: "system" | "assistant" | "user" | "result" | "tool";
@@ -106,8 +135,10 @@ export const AgentExecution: React.FC<AgentExecutionProps> = ({
       return m === 'opus' ? 'Claude 4 Opus' : 'Claude 4 Sonnet';
     }
     if (prov === 'gemini') {
-      if (m === 'gemini-2.5-pro') return 'Gemini 2.5 Pro';
-      if (m === 'gemini-2.5-flash') return 'Gemini 2.5 Flash';
+      if (m === 'auto') return 'Gemini Auto';
+      if (m === 'pro') return 'Gemini Pro';
+      if (m === 'flash') return 'Gemini Flash';
+      if (m === 'flash-lite') return 'Gemini Flash Lite';
     }
     if (prov === 'openai') {
       if (m === 'gpt-5-codex') return 'GPT-5 Codex';
@@ -705,66 +736,32 @@ export const AgentExecution: React.FC<AgentExecutionProps> = ({
                 </div>
               )}
               {provider === 'gemini' && (
-                <div className="flex gap-2">
-                  <motion.button
-                    type="button"
-                    onClick={() => !isRunning && setModel("gemini-2.5-pro")}
-                    whileTap={{ scale: 0.97 }}
-                    transition={{ duration: 0.15 }}
-                    className={cn(
-                      "flex-1 px-4 py-3 rounded-md border transition-all",
-                      model === "gemini-2.5-pro" 
-                        ? "border-primary bg-primary/10 text-primary" 
-                        : "border-border hover:border-primary/50 hover:bg-accent",
-                      isRunning && "opacity-50 cursor-not-allowed"
-                    )}
-                    disabled={isRunning}
-                  >
-                    <div className="flex items-center gap-3">
-                      <div className={cn(
-                        "w-4 h-4 rounded-full border-2 flex items-center justify-center",
-                        model === "gemini-2.5-pro" ? "border-primary" : "border-muted-foreground"
-                      )}>
-                        {model === "gemini-2.5-pro" && (
-                          <div className="w-2 h-2 rounded-full bg-primary" />
-                        )}
+                <div className="grid grid-cols-1 lg:grid-cols-2 gap-2">
+                  {GEMINI_EXECUTION_MODELS.map((option) => (
+                    <motion.button
+                      key={option.id}
+                      type="button"
+                      onClick={() => !isRunning && setModel(option.id)}
+                      whileTap={{ scale: 0.97 }}
+                      transition={{ duration: 0.15 }}
+                      className={cn(
+                        "flex-1 px-4 py-3 rounded-md border transition-all text-left",
+                        model === option.id
+                          ? "border-primary bg-primary/10 text-primary"
+                          : "border-border hover:border-primary/50 hover:bg-accent",
+                        isRunning && "opacity-50 cursor-not-allowed"
+                      )}
+                      disabled={isRunning}
+                    >
+                      <div className="flex items-center gap-3">
+                        {option.icon}
+                        <div>
+                          <div className="text-body-small font-medium">{option.title}</div>
+                          <div className="text-caption text-muted-foreground">{option.description}</div>
+                        </div>
                       </div>
-                      <div className="text-left">
-                        <div className="text-body-small font-medium">Gemini 2.5 Pro</div>
-                        <div className="text-caption text-muted-foreground">General purpose</div>
-                      </div>
-                    </div>
-                  </motion.button>
-                  
-                  <motion.button
-                    type="button"
-                    onClick={() => !isRunning && setModel("gemini-2.5-flash")}
-                    whileTap={{ scale: 0.97 }}
-                    transition={{ duration: 0.15 }}
-                    className={cn(
-                      "flex-1 px-4 py-3 rounded-md border transition-all",
-                      model === "gemini-2.5-flash" 
-                        ? "border-primary bg-primary/10 text-primary" 
-                        : "border-border hover:border-primary/50 hover:bg-accent",
-                      isRunning && "opacity-50 cursor-not-allowed"
-                    )}
-                    disabled={isRunning}
-                  >
-                    <div className="flex items-center gap-3">
-                      <div className={cn(
-                        "w-4 h-4 rounded-full border-2 flex items-center justify-center",
-                        model === "gemini-2.5-flash" ? "border-primary" : "border-muted-foreground"
-                      )}>
-                        {model === "gemini-2.5-flash" && (
-                          <div className="w-2 h-2 rounded-full bg-primary" />
-                        )}
-                      </div>
-                      <div className="text-left">
-                        <div className="text-body-small font-medium">Gemini 2.5 Flash</div>
-                        <div className="text-caption text-muted-foreground">Faster, cost-efficient</div>
-                      </div>
-                    </div>
-                  </motion.button>
+                    </motion.button>
+                  ))}
                 </div>
               )}
               {provider !== 'claude' && provider !== 'gemini' && (

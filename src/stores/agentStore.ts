@@ -112,7 +112,8 @@ const agentStore: StateCreator<
         if (provider === 'claude') {
           model = (model === 'opus' || model === 'sonnet') ? model : 'sonnet';
         } else if (provider === 'gemini') {
-          model = (model === 'gemini-2.5-pro' || model === 'gemini-2.5-flash') ? model : 'gemini-2.5-pro';
+          const allowed = new Set(['auto', 'pro', 'flash', 'flash-lite']);
+          model = allowed.has(model ?? '') ? model : 'auto';
         }
         // Fallback for other providers or missing model
         model = model ?? 'sonnet';

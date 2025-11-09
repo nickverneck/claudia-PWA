@@ -1,6 +1,6 @@
 import React, { useState } from "react";
 import { motion } from "framer-motion";
-import { ArrowLeft, Save, Loader2, ChevronDown, Zap, AlertCircle } from "lucide-react";
+import { ArrowLeft, Save, Loader2, ChevronDown, Zap, AlertCircle, Sparkles } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -11,6 +11,33 @@ import { cn } from "@/lib/utils";
 import MDEditor from "@uiw/react-md-editor";
 import { type AgentIconName } from "./CCAgents";
 import { IconPicker, ICON_MAP } from "./IconPicker";
+
+const GEMINI_MODEL_OPTIONS = [
+  {
+    id: "auto",
+    title: "Gemini Auto",
+    description: "Let Gemini pick the best capability for the task",
+    icon: <Sparkles className="h-4 w-4 text-primary" />,
+  },
+  {
+    id: "pro",
+    title: "Gemini Pro",
+    description: "Full power for deep reasoning and larger changes",
+    icon: <Zap className="h-4 w-4 text-primary" />,
+  },
+  {
+    id: "flash",
+    title: "Gemini Flash",
+    description: "Balanced speed and capability for most edits",
+    icon: <Zap className="h-4 w-4 text-primary/80" />,
+  },
+  {
+    id: "flash-lite",
+    title: "Gemini Flash Lite",
+    description: "Fastest option for lightweight assistance",
+    icon: <Zap className="h-4 w-4 text-primary/60" />,
+  },
+];
 
 
 interface CreateAgentProps {
@@ -432,53 +459,30 @@ export const CreateAgent: React.FC<CreateAgentProps> = ({
               {selectedProvider === "gemini" && (
                 <div className="space-y-2 mt-4">
                   <Label className="text-caption text-muted-foreground">Model</Label>
-                  <div className="flex flex-col sm:flex-row gap-2">
-                    <motion.button
-                      type="button"
-                      onClick={() => setModel("gemini-2.5-pro")}
-                      whileTap={{ scale: 0.97 }}
-                      transition={{ duration: 0.15 }}
-                      className={cn(
-                        "flex-1 px-4 py-3 rounded-md border transition-all",
-                        model === "gemini-2.5-pro"
-                          ? "border-primary bg-primary/10 text-primary"
-                          : "border-border hover:border-primary/50 hover:bg-accent"
-                      )}
-                    >
-                      <div className="flex items-center gap-3">
-                        <Zap className={cn(
-                          "h-4 w-4",
-                          model === "gemini-2.5-pro" ? "text-primary" : "text-muted-foreground"
-                        )} />
-                        <div className="text-left">
-                          <div className="text-body-small font-medium">Gemini 2.5 Pro</div>
-                          <div className="text-caption text-muted-foreground">Advanced, large context window</div>
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                    {GEMINI_MODEL_OPTIONS.map((option) => (
+                      <motion.button
+                        key={option.id}
+                        type="button"
+                        onClick={() => setModel(option.id)}
+                        whileTap={{ scale: 0.97 }}
+                        transition={{ duration: 0.15 }}
+                        className={cn(
+                          "flex-1 px-4 py-3 rounded-md border transition-all text-left",
+                          model === option.id
+                            ? "border-primary bg-primary/10 text-primary"
+                            : "border-border hover:border-primary/50 hover:bg-accent"
+                        )}
+                      >
+                        <div className="flex items-center gap-3">
+                          {option.icon}
+                          <div>
+                            <div className="text-body-small font-medium">{option.title}</div>
+                            <div className="text-caption text-muted-foreground">{option.description}</div>
+                          </div>
                         </div>
-                      </div>
-                    </motion.button>
-                    <motion.button
-                      type="button"
-                      onClick={() => setModel("gemini-2.5-flash")}
-                      whileTap={{ scale: 0.97 }}
-                      transition={{ duration: 0.15 }}
-                      className={cn(
-                        "flex-1 px-4 py-3 rounded-md border transition-all",
-                        model === "gemini-2.5-flash"
-                          ? "border-primary bg-primary/10 text-primary"
-                          : "border-border hover:border-primary/50 hover:bg-accent"
-                      )}
-                    >
-                      <div className="flex items-center gap-3">
-                        <Zap className={cn(
-                          "h-4 w-4",
-                          model === "gemini-2.5-flash" ? "text-primary" : "text-muted-foreground"
-                        )} />
-                        <div className="text-left">
-                          <div className="text-body-small font-medium">Gemini 2.5 Flash</div>
-                          <div className="text-caption text-muted-foreground">Optimized for speed and efficiency</div>
-                        </div>
-                      </div>
-                    </motion.button>
+                      </motion.button>
+                    ))}
                   </div>
                 </div>
               )}

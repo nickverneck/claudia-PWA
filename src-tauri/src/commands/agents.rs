@@ -51,6 +51,7 @@ pub struct AgentRun {
     pub agent_icon: String,
     pub task: String,
     pub model: String,
+    pub provider: String,
     pub project_path: String,
     pub session_id: String, // UUID session ID from Claude Code
     pub status: String,     // 'pending', 'running', 'completed', 'failed', 'cancelled'
@@ -282,6 +283,7 @@ pub fn init_database(app: &AppHandle) -> SqliteResult<Connection> {
             agent_icon TEXT NOT NULL,
             task TEXT NOT NULL,
             model TEXT NOT NULL,
+            provider TEXT NOT NULL DEFAULT 'claude',
             project_path TEXT NOT NULL,
             session_id TEXT NOT NULL,
             status TEXT NOT NULL DEFAULT 'pending',
@@ -303,6 +305,10 @@ pub fn init_database(app: &AppHandle) -> SqliteResult<Connection> {
     let _ = conn.execute("ALTER TABLE agent_runs ADD COLUMN pid INTEGER", []);
     let _ = conn.execute(
         "ALTER TABLE agent_runs ADD COLUMN process_started_at TEXT",
+        [],
+    );
+    let _ = conn.execute(
+        "ALTER TABLE agent_runs ADD COLUMN provider TEXT DEFAULT 'claude'",
         [],
     );
 
@@ -592,10 +598,10 @@ pub async fn list_agent_runs(
     let conn = db.0.lock().map_err(|e| e.to_string())?;
 
     let query = if agent_id.is_some() {
-        "SELECT id, agent_id, agent_name, agent_icon, task, model, project_path, session_id, status, pid, process_started_at, created_at, completed_at 
+        "SELECT id, agent_id, agent_name, agent_icon, task, model, provider, project_path, session_id, status, pid, process_started_at, created_at, completed_at 
          FROM agent_runs WHERE agent_id = ?1 ORDER BY created_at DESC"
     } else {
-        "SELECT id, agent_id, agent_name, agent_icon, task, model, project_path, session_id, status, pid, process_started_at, created_at, completed_at 
+        "SELECT id, agent_id, agent_name, agent_icon, task, model, provider, project_path, session_id, status, pid, process_started_at, created_at, completed_at 
          FROM agent_runs ORDER BY created_at DESC"
     };
 
@@ -609,19 +615,20 @@ pub async fn list_agent_runs(
             agent_icon: row.get(3)?,
             task: row.get(4)?,
             model: row.get(5)?,
-            project_path: row.get(6)?,
-            session_id: row.get(7)?,
+            provider: row.get(6)?,
+            project_path: row.get(7)?,
+            session_id: row.get(8)?,
             status: row
-                .get::<_, String>(8)
+                .get::<_, String>(9)
                 .unwrap_or_else(|_| "pending".to_string()),
             pid: row
-                .get::<_, Option<i64>>(9)
+                .get::<_, Option<i64>>(10)
                 .ok()
                 .flatten()
                 .map(|p| p as u32),
-            process_started_at: row.get(10)?,
-            created_at: row.get(11)?,
-            completed_at: row.get(12)?,
+            process_started_at: row.get(11)?,
+            created_at: row.get(12)?,
+            completed_at: row.get(13)?,
         })
     };
 
@@ -644,7 +651,7 @@ pub async fn get_agent_run(db: State<'_, AgentDb>, id: i64) -> Result<AgentRun, 
 
     let run = conn
         .query_row(
-            "SELECT id, agent_id, agent_name, agent_icon, task, model, project_path, session_id, status, pid, process_started_at, created_at, completed_at 
+        "SELECT id, agent_id, agent_name, agent_icon, task, model, provider, project_path, session_id, status, pid, process_started_at, created_at, completed_at 
              FROM agent_runs WHERE id = ?1",
             params![id],
             |row| {
@@ -652,16 +659,17 @@ pub async fn get_agent_run(db: State<'_, AgentDb>, id: i64) -> Result<AgentRun, 
                     id: Some(row.get(0)?),
                     agent_id: row.get(1)?,
                     agent_name: row.get(2)?,
-                    agent_icon: row.get(3)?,
-                    task: row.get(4)?,
-                    model: row.get(5)?,
-                    project_path: row.get(6)?,
-                    session_id: row.get(7)?,
-                    status: row.get::<_, String>(8).unwrap_or_else(|_| "pending".to_string()),
-                    pid: row.get::<_, Option<i64>>(9).ok().flatten().map(|p| p as u32),
-                    process_started_at: row.get(10)?,
-                    created_at: row.get(11)?,
-                    completed_at: row.get(12)?,
+            agent_icon: row.get(3)?,
+            task: row.get(4)?,
+            model: row.get(5)?,
+            provider: row.get(6)?,
+            project_path: row.get(7)?,
+            session_id: row.get(8)?,
+            status: row.get::<_, String>(9).unwrap_or_else(|_| "pending".to_string()),
+            pid: row.get::<_, Option<i64>>(10).ok().flatten().map(|p| p as u32),
+            process_started_at: row.get(11)?,
+            created_at: row.get(12)?,
+            completed_at: row.get(13)?,
                 })
             },
         )
@@ -757,8 +765,8 @@ pub async fn execute_agent(
     let run_id = {
         let conn = db.0.lock().map_err(|e| e.to_string())?;
         conn.execute(
-            "INSERT INTO agent_runs (agent_id, agent_name, agent_icon, task, model, project_path, session_id) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7)",
-            params![agent_id, agent.name, agent.icon, task, execution_model, project_path, ""],
+            "INSERT INTO agent_runs (agent_id, agent_name, agent_icon, task, model, provider, project_path, session_id) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8)",
+            params![agent_id, agent.name, agent.icon, task, execution_model, provider_value, project_path, ""],
         )
         .map_err(|e| e.to_string())?;
         conn.last_insert_rowid()
@@ -1412,16 +1420,14 @@ async fn spawn_non_claude_agent(
             let installations = gemini::discover_gemini_installations();
             let best = gemini::select_best_installation(installations)
                 .ok_or_else(|| "No Gemini CLI installations found".to_string())?;
-            let args = vec![
-                "cli".to_string(),
-                "run".to_string(),
+            let mut args = vec![
+                "--yolo".to_string(),
                 "--model".to_string(),
                 execution_model.clone(),
-                "--project".to_string(),
-                project_path.clone(),
-                "--task".to_string(),
-                task.clone(),
             ];
+            if !task.trim().is_empty() {
+                args.push(task.clone());
+            }
             (best.path, args)
         }
         CliProvider::OpenAI => {
@@ -1496,7 +1502,7 @@ pub async fn list_running_sessions(
 
     // First get all running sessions from the database
     let mut stmt = conn.prepare(
-        "SELECT id, agent_id, agent_name, agent_icon, task, model, project_path, session_id, status, pid, process_started_at, created_at, completed_at 
+        "SELECT id, agent_id, agent_name, agent_icon, task, model, provider, project_path, session_id, status, pid, process_started_at, created_at, completed_at 
          FROM agent_runs WHERE status = 'running' ORDER BY process_started_at DESC"
     ).map_err(|e| e.to_string())?;
 
@@ -1509,19 +1515,20 @@ pub async fn list_running_sessions(
                 agent_icon: row.get(3)?,
                 task: row.get(4)?,
                 model: row.get(5)?,
-                project_path: row.get(6)?,
-                session_id: row.get(7)?,
+                provider: row.get(6)?,
+                project_path: row.get(7)?,
+                session_id: row.get(8)?,
                 status: row
-                    .get::<_, String>(8)
+                    .get::<_, String>(9)
                     .unwrap_or_else(|_| "pending".to_string()),
                 pid: row
-                    .get::<_, Option<i64>>(9)
+                    .get::<_, Option<i64>>(10)
                     .ok()
                     .flatten()
                     .map(|p| p as u32),
-                process_started_at: row.get(10)?,
-                created_at: row.get(11)?,
-                completed_at: row.get(12)?,
+                process_started_at: row.get(11)?,
+                created_at: row.get(12)?,
+                completed_at: row.get(13)?,
             })
         })
         .map_err(|e| e.to_string())?

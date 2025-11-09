@@ -119,7 +119,11 @@ pub async fn execute_cli_command(
                 return Err("No valid Gemini installation found.".to_string());
             };
             let mut cmd_builder = create_tokio_command_with_env(&gemini_path);
-            cmd_builder.args(&["cli", "run", "--model", &model, "--project", &project_path, "--task", &task]);
+            cmd_builder.current_dir(&project_path);
+            cmd_builder.args(&["--yolo", "--model", &model]);
+            if !task.trim().is_empty() {
+                cmd_builder.arg(&task);
+            }
             cmd_builder
         },
         CliProvider::OpenAI => {
